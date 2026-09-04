@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && vite build -c vite.client.config.mts",
+    "build": "vite build",
     "preview": "vite preview",
     "deploy": "vite build && wrangler deploy",
     "typecheck": "tsc --noEmit",

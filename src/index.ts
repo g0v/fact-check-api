@@ -1,10 +1,8 @@
 import { Hono } from 'hono'
 import HomeView from './views/Home.vue'
 import AboutView from './views/About.vue'
-import WordView from './views/Word.vue'
-import HundredChartView from './views/HundredChart.vue'
 import { renderPage } from './ssr/render'
-import { headForHome, headForAbout, headForWord, headForHundredChart } from './ssr/heads'
+import { headForHome, headForAbout } from './ssr/heads'
 
 // Cloudflare Worker 綁定型別；ASSETS 在 wrangler.jsonc 對應到 ./public/
 type Bindings = {
@@ -28,31 +26,6 @@ app.get('/', async (c) => {
 app.get('/about', async (c) => {
   const origin = new URL(c.req.url).origin
   const html = await renderPage(AboutView, {}, headForAbout(origin))
-  return c.html(html)
-})
-
-// 動態路由：:w 為網址中的字，會傳進 Vue 元件並用來組 og:image
-app.get('/word/:w', async (c) => {
-  const word = decodeURIComponent(c.req.param('w'))
-  const origin = new URL(c.req.url).origin
-  const html = await renderPage(WordView, { word }, headForWord(word, origin))
-  return c.html(html)
-})
-
-// 百數表：SSR + client hydration（v-model / v-for / :style）
-app.get('/hundred', async (c) => {
-  const origin = new URL(c.req.url).origin
-  const html = await renderPage(
-    HundredChartView,
-    {},
-    headForHundredChart(origin),
-    {
-      hydrate: {
-        devSrc: '/src/client/hundred-chart-entry.ts',
-        prodSrc: '/js/hundred-chart.js',
-      },
-    },
-  )
   return c.html(html)
 })
 

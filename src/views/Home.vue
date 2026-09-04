@@ -13,8 +13,6 @@ import NavBar from '../components/NavBar.vue'
     </p>
     <ul>
       <li><a href="/about">About this template</a></li>
-      <li><a href="/word/%E8%90%8C">/word/萌 — dynamic route demo</a></li>
-      <li><a href="/hundred">/hundred — 百數表 hydration（v-model / v-for / :style）</a></li>
       <li><a href="/api/hello">/api/hello — JSON API demo</a></li>
     </ul>
   </main>
