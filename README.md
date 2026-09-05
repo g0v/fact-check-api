@@ -44,13 +44,13 @@ OpenRouter: gpt-oss-safeguard-20b
 
 模型職責刻意分離：
 
-| 階段 | 服務 | 職責 |
-| --- | --- | --- |
-| Safety | OpenRouter `openai/gpt-oss-safeguard-20b` | 判斷內容是否允許進入查核流程 |
-| Retrieval | Cofacts `moreLikeThis` | 以高 recall 找出可能相關文章 |
-| Reranking | Workers AI `@cf/openai/gpt-oss-20b` | 判斷候選文章是否與主張實質相關；不判定真假 |
-| Evidence | Cofacts GraphQL | 取得通過初篩文章的人工與 AI 查核資料 |
-| Synthesis | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 根據整理後的證據產生最終判斷 |
+| 階段      | 服務                                       | 職責                                       |
+| --------- | ------------------------------------------ | ------------------------------------------ |
+| Safety    | OpenRouter `openai/gpt-oss-safeguard-20b`  | 判斷內容是否允許進入查核流程               |
+| Retrieval | Cofacts `moreLikeThis`                     | 以高 recall 找出可能相關文章               |
+| Reranking | Workers AI `@cf/openai/gpt-oss-20b`        | 判斷候選文章是否與主張實質相關；不判定真假 |
+| Evidence  | Cofacts GraphQL                            | 取得通過初篩文章的人工與 AI 查核資料       |
+| Synthesis | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 根據整理後的證據產生最終判斷               |
 
 ## API（目標介面）
 
@@ -158,14 +158,14 @@ Safety Gate 至少涵蓋仇恨／去人化、騷擾、人身攻擊、露骨性�
 
 上游服務失敗時：
 
-| 階段 | 行為 |
-| --- | --- |
-| Safeguard | 回傳 `502`，不可跳過安全層 |
-| Cofacts search | 若有 URL 可繼續，但標記 upstream unavailable |
-| Relevance filter | 不把未篩選候選直接送給 Gemma |
-| Cofacts detail | 單筆失敗可跳過，保留其他 evidence |
-| URL fetch | Cofacts 流程照常進行 |
-| Gemma synthesis | 回傳 `502`，不可自行拼接 factuality |
+| 階段             | 行為                                         |
+| ---------------- | -------------------------------------------- |
+| Safeguard        | 回傳 `502`，不可跳過安全層                   |
+| Cofacts search   | 若有 URL 可繼續，但標記 upstream unavailable |
+| Relevance filter | 不把未篩選候選直接送給 Gemma                 |
+| Cofacts detail   | 單筆失敗可跳過，保留其他 evidence            |
+| URL fetch        | Cofacts 流程照常進行                         |
+| Gemma synthesis  | 回傳 `502`，不可自行拼接 factuality          |
 
 ## 設定
 
@@ -198,7 +198,7 @@ npx wrangler secret put OPENROUTER_API_KEY
   "name": "fact-check-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
-  "ai": { "binding": "AI" }
+  "ai": { "binding": "AI" },
 }
 ```
 

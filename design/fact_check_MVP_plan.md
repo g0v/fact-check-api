@@ -2,24 +2,27 @@
 
 ## 0. MVP 目標
 
-* [ ] 使用 **Cloudflare Workers**
-* [ ] 使用 **Hono**
-* [ ] 建立：
+- [ ] 使用 **Cloudflare Workers**
+- [ ] 使用 **Hono**
+- [ ] 建立：
 
-  * [ ] `GET /api/fact-check?text={text}`
-  * [ ] `GET /api/fact-check?text={text}&url={url}`
-  * [ ] `POST /api/fact-check`
-* [ ] MVP 唯一需要設定的 Secret：
+  - [ ] `GET /api/fact-check?text={text}`
+  - [ ] `GET /api/fact-check?text={text}&url={url}`
+  - [ ] `POST /api/fact-check`
 
-  * [ ] `OPENROUTER_API_KEY`
-* [ ] Cofacts GraphQL 不使用 app-id / app-secret
-* [ ] Cloudflare Workers AI 使用：
+- [ ] MVP 唯一需要設定的 Secret：
 
-  * [ ] `@cf/openai/gpt-oss-20b`：Cofacts 搜尋結果語意初篩／重排序
-  * [ ] `@cf/google/gemma-4-26b-a4b-it`：最終證據綜整與查核判斷
-* [ ] OpenRouter 使用：
+  - [ ] `OPENROUTER_API_KEY`
 
-  * [ ] `openai/gpt-oss-safeguard-20b`：內容安全分類
+- [ ] Cofacts GraphQL 不使用 app-id / app-secret
+- [ ] Cloudflare Workers AI 使用：
+
+  - [ ] `@cf/openai/gpt-oss-20b`：Cofacts 搜尋結果語意初篩／重排序
+  - [ ] `@cf/google/gemma-4-26b-a4b-it`：最終證據綜整與查核判斷
+
+- [ ] OpenRouter 使用：
+
+  - [ ] `openai/gpt-oss-safeguard-20b`：內容安全分類
 
 ---
 
@@ -41,11 +44,11 @@ Gemma 4 26B
 = 綜合真正相關的查核證據後，這個主張可信程度如何？
 ```
 
-* [ ] 不把 Cofacts `_score` 解讀成百分比
-* [ ] 不把 Cofacts `_score` 直接轉成 factuality
-* [ ] 不讓 `gpt-oss-20b` 判定真假
-* [ ] `gpt-oss-20b` 在這個階段**只判斷相關性**
-* [ ] 最終真假判斷只在 Evidence Synthesis 階段產生
+- [ ] 不把 Cofacts `_score` 解讀成百分比
+- [ ] 不把 Cofacts `_score` 直接轉成 factuality
+- [ ] 不讓 `gpt-oss-20b` 判定真假
+- [ ] `gpt-oss-20b` 在這個階段**只判斷相關性**
+- [ ] 最終真假判斷只在 Evidence Synthesis 階段產生
 
 ---
 
@@ -161,11 +164,11 @@ references
 
 優點：
 
-* [ ] 減少 Cofacts 不必要 payload
-* [ ] 減少後續模型 context
-* [ ] 避免大量無關 reply 進入 Gemma
-* [ ] 將「搜尋」與「查核證據」兩個概念分開
-* [ ] 每個階段比較容易測試與除錯
+- [ ] 減少 Cofacts 不必要 payload
+- [ ] 減少後續模型 context
+- [ ] 避免大量無關 reply 進入 Gemma
+- [ ] 將「搜尋」與「查核證據」兩個概念分開
+- [ ] 每個階段比較容易測試與除錯
 
 ---
 
@@ -173,20 +176,20 @@ references
 
 ## M0 — Hono Worker
 
-* [ ] 建立 Cloudflare Workers project
+- [ ] 建立 Cloudflare Workers project
 
 ```bash
 npm create cloudflare@latest fact-check-api
 cd fact-check-api
 ```
 
-* [ ] 安裝 Hono
+- [ ] 安裝 Hono
 
 ```bash
 npm install hono
 ```
 
-* [ ] 設定唯一 Secret：
+- [ ] 設定唯一 Secret：
 
 ```bash
 npx wrangler secret put OPENROUTER_API_KEY
@@ -215,8 +218,8 @@ CLOUDFLARE_AI_API_KEY
 
 因為：
 
-* [ ] Cofacts 公開呼叫
-* [ ] Workers AI 直接透過 `env.AI` binding 使用
+- [ ] Cofacts 公開呼叫
+- [ ] Workers AI 直接透過 `env.AI` binding 使用
 
 ---
 
@@ -270,7 +273,7 @@ relevance-filter.ts
 
 # 7. Health Check
 
-* [ ] 建立：
+- [ ] 建立：
 
 ```http
 GET /health
@@ -320,18 +323,18 @@ Content-Type: application/json
 }
 ```
 
-* [ ] GET / POST 最後進入同一個 `factCheck()` service
+- [ ] GET / POST 最後進入同一個 `factCheck()` service
 
 ---
 
 # 9. Input Validation
 
-* [ ] `text` 必填
-* [ ] trim
-* [ ] 空字串 → `400`
-* [ ] 設定最大文字長度
-* [ ] `url` optional
-* [ ] URL 僅接受 HTTP / HTTPS
+- [ ] `text` 必填
+- [ ] trim
+- [ ] 空字串 → `400`
+- [ ] 設定最大文字長度
+- [ ] `url` optional
+- [ ] URL 僅接受 HTTP / HTTPS
 
 錯誤：
 
@@ -377,11 +380,11 @@ Authorization: Bearer ${OPENROUTER_API_KEY}
 
 至少處理：
 
-* [ ] Hate / dehumanization
-* [ ] Harassment / personal attack
-* [ ] Explicit sexual content
-* [ ] Violent threat
-* [ ] Privacy exposure
+- [ ] Hate / dehumanization
+- [ ] Harassment / personal attack
+- [ ] Explicit sexual content
+- [ ] Violent threat
+- [ ] Privacy exposure
 
 但必須加入：
 
@@ -389,21 +392,21 @@ Authorization: Bearer ${OPENROUTER_API_KEY}
 
 以下不因原句本身敏感而直接 block：
 
-* [ ] 引述待查核言論
-* [ ] 新聞報導
-* [ ] 公共政策討論
-* [ ] 學術研究
-* [ ] 批判性分析
-* [ ] 詢問某項攻擊／仇恨敘述是否真實
+- [ ] 引述待查核言論
+- [ ] 新聞報導
+- [ ] 公共政策討論
+- [ ] 學術研究
+- [ ] 批判性分析
+- [ ] 詢問某項攻擊／仇恨敘述是否真實
 
 輸出：
 
 ```ts
 type ModerationResult = {
-  decision: 'allow' | 'review' | 'block'
-  categories: string[]
-  reason?: string
-}
+  decision: "allow" | "review" | "block";
+  categories: string[];
+  reason?: string;
+};
 ```
 
 ---
@@ -421,8 +424,8 @@ block
 → 結束
 ```
 
-* [ ] Safeguard upstream failure → `502`
-* [ ] 不在 Safeguard failure 時偷偷跳過安全層
+- [ ] Safeguard upstream failure → `502`
+- [ ] 不在 Safeguard failure 時偷偷跳過安全層
 
 ---
 
@@ -437,7 +440,7 @@ src/services/cofacts-search.ts
 功能：
 
 ```ts
-searchCofactsCandidates(text)
+searchCofactsCandidates(text);
 ```
 
 ---
@@ -480,13 +483,13 @@ first: 15
 預設：
 
 ```ts
-COFACTS_CANDIDATE_LIMIT = 15
+COFACTS_CANDIDATE_LIMIT = 15;
 ```
 
-* [ ] 初期設定 15
-* [ ] 未來依實測可調整成 10 / 20
-* [ ] 不要因 `_score` 看似低而提前丟棄
-* [ ] `_score` 只保留當 metadata
+- [ ] 初期設定 15
+- [ ] 未來依實測可調整成 10 / 20
+- [ ] 不要因 `_score` 看似低而提前丟棄
+- [ ] `_score` 只保留當 metadata
 
 原因：
 
@@ -524,10 +527,10 @@ Precision 優先
 
 ```ts
 type CofactsCandidate = {
-  articleId: string
-  text: string
-  searchScore: number | null
-}
+  articleId: string;
+  text: string;
+  searchScore: number | null;
+};
 ```
 
 注意欄位故意叫：
@@ -566,12 +569,9 @@ src/services/relevance-filter.ts
 呼叫：
 
 ```ts
-env.AI.run(
-  '@cf/openai/gpt-oss-20b',
-  {
-    messages
-  }
-)
+env.AI.run("@cf/openai/gpt-oss-20b", {
+  messages,
+});
 ```
 
 ---
@@ -645,11 +645,11 @@ Return structured JSON only.
 
 ```ts
 type RelevanceResult = {
-  articleId: string
-  relevant: boolean
-  relevance: number
-  reason: string
-}
+  articleId: string;
+  relevant: boolean;
+  relevance: number;
+  reason: string;
+};
 ```
 
 其中：
@@ -673,28 +673,28 @@ relevance
 第一版先使用：
 
 ```ts
-RELEVANCE_THRESHOLD = 0.65
+RELEVANCE_THRESHOLD = 0.65;
 ```
 
-* [ ] `>= 0.65` → 保留
-* [ ] `< 0.65` → 排除
-* [ ] 依 relevance 排序
-* [ ] 最多保留 5 筆
+- [ ] `>= 0.65` → 保留
+- [ ] `< 0.65` → 排除
+- [ ] 依 relevance 排序
+- [ ] 最多保留 5 筆
 
 例如：
 
 ```ts
 const relevant = results
-  .filter(x => x.relevant && x.relevance >= 0.65)
+  .filter((x) => x.relevant && x.relevance >= 0.65)
   .sort((a, b) => b.relevance - a.relevance)
-  .slice(0, 5)
+  .slice(0, 5);
 ```
 
 注意：
 
-* [ ] `0.65` 是 MVP 初始值
-* [ ] 之後必須用測試 dataset 校準
-* [ ] 不宣稱 0.65 是客觀標準
+- [ ] `0.65` 是 MVP 初始值
+- [ ] 之後必須用測試 dataset 校準
+- [ ] 不宣稱 0.65 是客觀標準
 
 ---
 
@@ -704,18 +704,18 @@ Cofacts 文章可能非常長。
 
 送入 reranker 前：
 
-* [ ] 保留 article ID
-* [ ] 保留完整 text 的本地變數
-* [ ] 模型輸入可先限制每篇約 2,000～4,000 字
-* [ ] 最好不要直接把 15 篇無限長全文送入模型
+- [ ] 保留 article ID
+- [ ] 保留完整 text 的本地變數
+- [ ] 模型輸入可先限制每篇約 2,000～4,000 字
+- [ ] 最好不要直接把 15 篇無限長全文送入模型
 
 例如：
 
 ```ts
 const candidateForModel = {
   articleId,
-  text: text.slice(0, 3000)
-}
+  text: text.slice(0, 3000),
+};
 ```
 
 後續若發現截斷造成漏判，再調整。
@@ -782,12 +782,12 @@ Cofacts 尚未找到足夠相關的既有內容
 
 然後：
 
-* [ ] `related_checks: []`
-* [ ] 若有 URL → 仍交給 Gemma
-* [ ] 若沒有 URL → Gemma 應高度傾向：
+- [ ] `related_checks: []`
+- [ ] 若有 URL → 仍交給 Gemma
+- [ ] 若沒有 URL → Gemma 應高度傾向：
 
-  * [ ] `insufficient_evidence`
-  * [ ] low confidence
+  - [ ] `insufficient_evidence`
+  - [ ] low confidence
 
 不能讓 Gemma 因為 Cofacts 沒資料就靠模型記憶自行查核。
 
@@ -806,7 +806,7 @@ src/services/cofacts-evidence.ts
 功能：
 
 ```ts
-getCofactsEvidence(articleIds)
+getCofactsEvidence(articleIds);
 ```
 
 ---
@@ -854,9 +854,9 @@ query GetEvidence($id: String!) {
 }
 ```
 
-* [ ] 每個 relevant article 取得詳細 evidence
-* [ ] 最多 3～5 篇
-* [ ] 可用 `Promise.all()` 平行取得
+- [ ] 每個 relevant article 取得詳細 evidence
+- [ ] 最多 3～5 篇
+- [ ] 可用 `Promise.all()` 平行取得
 
 ---
 
@@ -892,36 +892,25 @@ Cofacts AI reply
 
 ```ts
 type Evidence = {
-  source:
-    | 'cofacts-human'
-    | 'cofacts-ai'
-    | 'provided-url'
+  source: "cofacts-human" | "cofacts-ai" | "provided-url";
 
-  articleId?: string
+  articleId?: string;
 
-  evidenceText: string
+  evidenceText: string;
 
-  verdict?:
-    | 'supports'
-    | 'refutes'
-    | 'mixed'
-    | 'opinion'
-    | 'unknown'
+  verdict?: "supports" | "refutes" | "mixed" | "opinion" | "unknown";
 
-  sourceUrl?: string
-  cofactsUrl?: string
+  sourceUrl?: string;
+  cofactsUrl?: string;
 
-  retrievalScore?: number
-  relevanceScore?: number
+  retrievalScore?: number;
+  relevanceScore?: number;
 
-  positiveFeedback?: number
-  negativeFeedback?: number
+  positiveFeedback?: number;
+  negativeFeedback?: number;
 
-  reliability:
-    | 'human-community'
-    | 'ai-generated'
-    | 'user-provided'
-}
+  reliability: "human-community" | "ai-generated" | "user-provided";
+};
 ```
 
 特別保留兩個不同欄位：
@@ -958,9 +947,9 @@ NOT_ARTICLE
 
 但：
 
-* [ ] 只是 Evidence metadata
-* [ ] 不是直接最終 verdict
-* [ ] 不直接換算 factuality
+- [ ] 只是 Evidence metadata
+- [ ] 不是直接最終 verdict
+- [ ] 不直接換算 factuality
 
 ---
 
@@ -978,7 +967,7 @@ https://cofacts.tw/article/{ARTICLE_ID}
 https://cofacts.tw/article/3fygvjl81j6co
 ```
 
-* [ ] 每筆 related check 都保留 Cofacts article URL
+- [ ] 每筆 related check 都保留 Cofacts article URL
 
 ---
 
@@ -998,22 +987,22 @@ HTML extraction
 provided-url evidence
 ```
 
-* [ ] URL 不作為「可信來源」自動採信
-* [ ] 只是使用者提供的 context
+- [ ] URL 不作為「可信來源」自動採信
+- [ ] 只是使用者提供的 context
 
 ---
 
 # 32. URL SSRF 防護
 
-* [ ] 僅接受 HTTP / HTTPS
-* [ ] 擋 localhost
-* [ ] 擋 loopback
-* [ ] 擋 private network
-* [ ] 擋 link-local
-* [ ] redirect 後重新檢查
-* [ ] response size limit
-* [ ] timeout
-* [ ] content-type validation
+- [ ] 僅接受 HTTP / HTTPS
+- [ ] 擋 localhost
+- [ ] 擋 loopback
+- [ ] 擋 private network
+- [ ] 擋 link-local
+- [ ] redirect 後重新檢查
+- [ ] response size limit
+- [ ] timeout
+- [ ] content-type validation
 
 ---
 
@@ -1024,8 +1013,8 @@ Safety Gate 通過後：
 ```ts
 const [candidates, urlContext] = await Promise.all([
   searchCofactsCandidates(text),
-  url ? fetchUrlContext(url) : Promise.resolve(null)
-])
+  url ? fetchUrlContext(url) : Promise.resolve(null),
+]);
 ```
 
 接著：
@@ -1148,12 +1137,12 @@ Return structured JSON only.
 
 ```ts
 type Verdict =
-  | 'supported'
-  | 'mostly_supported'
-  | 'mixed'
-  | 'mostly_refuted'
-  | 'refuted'
-  | 'insufficient_evidence'
+  | "supported"
+  | "mostly_supported"
+  | "mixed"
+  | "mostly_refuted"
+  | "refuted"
+  | "insufficient_evidence";
 ```
 
 ---
@@ -1267,48 +1256,38 @@ type Verdict =
 
 ```ts
 async function factCheck(input: FactCheckInput) {
-
   // 1. Safety
-  const moderation = await moderate(input.text)
+  const moderation = await moderate(input.text);
 
-  if (moderation.decision === 'block') {
-    return blockedResponse(input, moderation)
+  if (moderation.decision === "block") {
+    return blockedResponse(input, moderation);
   }
 
   // 2. Retrieval + URL context
   const [candidates, urlContext] = await Promise.all([
     searchCofactsCandidates(input.text),
-    input.url
-      ? fetchUrlContext(input.url)
-      : Promise.resolve(null)
-  ])
+    input.url ? fetchUrlContext(input.url) : Promise.resolve(null),
+  ]);
 
   // 3. Semantic relevance
-  const relevantCandidates =
-    await filterRelevantCandidates(
-      input.text,
-      candidates
-    )
+  const relevantCandidates = await filterRelevantCandidates(input.text, candidates);
 
   // 4. Fetch detailed evidence only for relevant articles
-  const cofactsEvidence =
-    await getCofactsEvidence(
-      relevantCandidates
-    )
+  const cofactsEvidence = await getCofactsEvidence(relevantCandidates);
 
   // 5. Normalize
   const evidence = normalizeEvidence({
     cofactsEvidence,
     relevantCandidates,
-    urlContext
-  })
+    urlContext,
+  });
 
   // 6. Final synthesis
   return synthesize({
     ...input,
     moderation,
-    evidence
-  })
+    evidence,
+  });
 }
 ```
 
@@ -1316,12 +1295,12 @@ async function factCheck(input: FactCheckInput) {
 
 # 42. 新版模型職責表
 
-| 階段        | 系統                                   | 任務                               |
-| --------- | ------------------------------------ | -------------------------------- |
-| Safety    | `gpt-oss-safeguard-20b` / OpenRouter | 是否允許進入處理                         |
-| Retrieval | Cofacts `moreLikeThis`               | 大量召回可能相關文章                       |
-| Reranking | `@cf/openai/gpt-oss-20b`             | 判斷文章是否真的與 claim 相關               |
-| Evidence  | Cofacts replies                      | 提供既有人工／AI 查核                     |
+| 階段      | 系統                                 | 任務                                 |
+| --------- | ------------------------------------ | ------------------------------------ |
+| Safety    | `gpt-oss-safeguard-20b` / OpenRouter | 是否允許進入處理                     |
+| Retrieval | Cofacts `moreLikeThis`               | 大量召回可能相關文章                 |
+| Reranking | `@cf/openai/gpt-oss-20b`             | 判斷文章是否真的與 claim 相關        |
+| Evidence  | Cofacts replies                      | 提供既有人工／AI 查核                |
 | Synthesis | Gemma 4 26B                          | 判斷 factuality、confidence、verdict |
 
 ---
@@ -1330,38 +1309,38 @@ async function factCheck(input: FactCheckInput) {
 
 ## Safeguard fail
 
-* [ ] 回 `502`
-* [ ] 不跳過 Safety Gate
+- [ ] 回 `502`
+- [ ] 不跳過 Safety Gate
 
 ## Cofacts Search fail
 
-* [ ] URL 有資料 → 可以繼續
-* [ ] response 標記 upstream unavailable
+- [ ] URL 有資料 → 可以繼續
+- [ ] response 標記 upstream unavailable
 
 ## Cofacts Search = 0
 
-* [ ] 不是錯誤
-* [ ] `related_checks: []`
+- [ ] 不是錯誤
+- [ ] `related_checks: []`
 
 ## gpt-oss relevance filter fail
 
-* [ ] 不直接把未過濾 Cofacts candidates 送 Gemma
-* [ ] 建議回 partial / upstream error
-* [ ] 避免重新引入 retrieval noise
+- [ ] 不直接把未過濾 Cofacts candidates 送 Gemma
+- [ ] 建議回 partial / upstream error
+- [ ] 避免重新引入 retrieval noise
 
 ## Cofacts Detail fail
 
-* [ ] 跳過單筆失敗 article
-* [ ] 其他 evidence 照常處理
+- [ ] 跳過單筆失敗 article
+- [ ] 其他 evidence 照常處理
 
 ## URL fetch fail
 
-* [ ] Cofacts 流程照常
+- [ ] Cofacts 流程照常
 
 ## Gemma fail
 
-* [ ] 回 `502`
-* [ ] 不自行拼 factuality
+- [ ] 回 `502`
+- [ ] 不自行拼 factuality
 
 ---
 
@@ -1396,9 +1375,9 @@ latency of each stage
 
 但：
 
-* [ ] production log 不應長期保存完整使用者 text
-* [ ] 不記錄 OpenRouter key
-* [ ] 不記錄完整敏感內容
+- [ ] production log 不應長期保存完整使用者 text
+- [ ] 不記錄 OpenRouter key
+- [ ] 不記錄完整敏感內容
 
 ---
 
@@ -1468,8 +1447,8 @@ AVqLDjRlyrDaTqlmmp7J
 → relevant
 ```
 
-* [ ] 每次 prompt 或模型調整後跑 regression test
-* [ ] 避免修改 prompt 後反而退化
+- [ ] 每次 prompt 或模型調整後跑 regression test
+- [ ] 避免修改 prompt 後反而退化
 
 ---
 
@@ -1477,12 +1456,12 @@ AVqLDjRlyrDaTqlmmp7J
 
 `gpt-oss-20b` 用在 reranking 時：
 
-* [ ] 一次批次判斷 10～20 candidates
-* [ ] 不逐篇 call
-* [ ] 限制 candidate text 長度
-* [ ] temperature 儘量低
-* [ ] 要求精簡 JSON
-* [ ] 不要求模型進行長篇 reasoning output
+- [ ] 一次批次判斷 10～20 candidates
+- [ ] 不逐篇 call
+- [ ] 限制 candidate text 長度
+- [ ] temperature 儘量低
+- [ ] 要求精簡 JSON
+- [ ] 不要求模型進行長篇 reasoning output
 
 如此新增 reranker 的成本與 latency 都能控制。
 
@@ -1492,18 +1471,18 @@ AVqLDjRlyrDaTqlmmp7J
 
 MVP 完成後才考慮：
 
-* [ ] Cache 相同 claim
-* [ ] Rate limiting
-* [ ] Claim extraction
-* [ ] 一段文字拆成多個 factual claims
-* [ ] 多 query retrieval
-* [ ] 同義詞／關鍵字補充搜尋
-* [ ] Cofacts query fusion
-* [ ] Search + semantic rerank ensemble
-* [ ] D1 保存匿名化的測試結果
-* [ ] 建立人工標註 relevance dataset
-* [ ] 校準 relevance threshold
-* [ ] 校準 factuality / confidence
+- [ ] Cache 相同 claim
+- [ ] Rate limiting
+- [ ] Claim extraction
+- [ ] 一段文字拆成多個 factual claims
+- [ ] 多 query retrieval
+- [ ] 同義詞／關鍵字補充搜尋
+- [ ] Cofacts query fusion
+- [ ] Search + semantic rerank ensemble
+- [ ] D1 保存匿名化的測試結果
+- [ ] 建立人工標註 relevance dataset
+- [ ] 校準 relevance threshold
+- [ ] 校準 factuality / confidence
 
 MVP 不先做。
 
@@ -1513,55 +1492,55 @@ MVP 不先做。
 
 ## Phase 1 — Skeleton
 
-* [ ] Hono
-* [ ] Worker
-* [ ] `/health`
-* [ ] Workers AI binding
+- [ ] Hono
+- [ ] Worker
+- [ ] `/health`
+- [ ] Workers AI binding
 
 ## Phase 2 — Safety
 
-* [ ] OpenRouter
-* [ ] `gpt-oss-safeguard-20b`
-* [ ] allow / review / block
+- [ ] OpenRouter
+- [ ] `gpt-oss-safeguard-20b`
+- [ ] allow / review / block
 
 ## Phase 3 — Cofacts Retrieval
 
-* [ ] `moreLikeThis`
-* [ ] `first: 15`
-* [ ] 只取得 `id / text / score`
+- [ ] `moreLikeThis`
+- [ ] `first: 15`
+- [ ] 只取得 `id / text / score`
 
 ## Phase 4 — Semantic Reranker
 
-* [ ] `@cf/openai/gpt-oss-20b`
-* [ ] batch candidates
-* [ ] relevant boolean
-* [ ] relevance `0~1`
-* [ ] reason
-* [ ] threshold
-* [ ] top 3～5
+- [ ] `@cf/openai/gpt-oss-20b`
+- [ ] batch candidates
+- [ ] relevant boolean
+- [ ] relevance `0~1`
+- [ ] reason
+- [ ] threshold
+- [ ] top 3～5
 
 ## Phase 5 — Cofacts Evidence
 
-* [ ] `GetArticle`
-* [ ] human replies
-* [ ] reply types
-* [ ] feedback
-* [ ] references
-* [ ] AI replies
+- [ ] `GetArticle`
+- [ ] human replies
+- [ ] reply types
+- [ ] feedback
+- [ ] references
+- [ ] AI replies
 
 ## Phase 6 — Evidence Normalization
 
-* [ ] human / AI 分流
-* [ ] retrievalScore
-* [ ] relevanceScore
-* [ ] source URLs
+- [ ] human / AI 分流
+- [ ] retrievalScore
+- [ ] relevanceScore
+- [ ] source URLs
 
 ## Phase 7 — Gemma
 
-* [ ] factuality
-* [ ] confidence
-* [ ] verdict
-* [ ] feedback
+- [ ] factuality
+- [ ] confidence
+- [ ] verdict
+- [ ] feedback
 
 到這裡：
 
@@ -1573,43 +1552,43 @@ GET /api/fact-check?text=...
 
 ## Phase 8 — URL
 
-* [ ] URL fetch
-* [ ] SSRF
-* [ ] extraction
-* [ ] provided-url evidence
+- [ ] URL fetch
+- [ ] SSRF
+- [ ] extraction
+- [ ] provided-url evidence
 
 ## Phase 9 — Hardening
 
-* [ ] logging
-* [ ] timeout
-* [ ] error handling
-* [ ] cache
-* [ ] rate limit
-* [ ] tests
+- [ ] logging
+- [ ] timeout
+- [ ] error handling
+- [ ] cache
+- [ ] rate limit
+- [ ] tests
 
 ---
 
 # 50. MVP Definition of Done
 
-* [ ] Hono API 可正常部署
-* [ ] 唯一 Secret 是 `OPENROUTER_API_KEY`
-* [ ] Safeguard 正常
-* [ ] Cofacts 公開 GraphQL 正常
-* [ ] `moreLikeThis` 可取得候選內容
-* [ ] 不把 Cofacts `_score` 當百分比
-* [ ] Cofacts 初步取至少約 10～20 candidates
-* [ ] `gpt-oss-20b` 可排除語意無關候選
-* [ ] reranker 不負責真假判定
-* [ ] 只對 relevant candidates 取得 detailed replies
-* [ ] Human reply 與 AI reply 分開
-* [ ] Gemma 只收到已整理好的 evidence
-* [ ] factuality / confidence 分離
-* [ ] 能輸出 fixed verdict enum
-* [ ] related_checks 有原始來源
-* [ ] 有 URL 時可以安全抓取
-* [ ] upstream failure 有明確 fallback
-* [ ] 你這次 Cofacts 實測案例成為 automated regression test
-* [ ] End-to-end 測試成功
+- [ ] Hono API 可正常部署
+- [ ] 唯一 Secret 是 `OPENROUTER_API_KEY`
+- [ ] Safeguard 正常
+- [ ] Cofacts 公開 GraphQL 正常
+- [ ] `moreLikeThis` 可取得候選內容
+- [ ] 不把 Cofacts `_score` 當百分比
+- [ ] Cofacts 初步取至少約 10～20 candidates
+- [ ] `gpt-oss-20b` 可排除語意無關候選
+- [ ] reranker 不負責真假判定
+- [ ] 只對 relevant candidates 取得 detailed replies
+- [ ] Human reply 與 AI reply 分開
+- [ ] Gemma 只收到已整理好的 evidence
+- [ ] factuality / confidence 分離
+- [ ] 能輸出 fixed verdict enum
+- [ ] related_checks 有原始來源
+- [ ] 有 URL 時可以安全抓取
+- [ ] upstream failure 有明確 fallback
+- [ ] 你這次 Cofacts 實測案例成為 automated regression test
+- [ ] End-to-end 測試成功
 
 ---
 

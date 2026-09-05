@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import NavBar from '../components/NavBar.vue'
+import NavBar from "../components/NavBar.vue";
 </script>
 
 <template>
@@ -8,8 +8,7 @@ import NavBar from '../components/NavBar.vue'
     <h1>Hono + Vue SSR Template</h1>
     <p>
       A minimal Cloudflare Workers template using
-      <strong>Hono</strong> for routing and
-      <strong>Vue 3 SSR</strong> for rendering.
+      <strong>Hono</strong> for routing and <strong>Vue 3 SSR</strong> for rendering.
     </p>
     <ul>
       <li><a href="/about">About this template</a></li>

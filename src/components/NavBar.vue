@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ current?: string }>()
+defineProps<{ current?: string }>();
 </script>
 
 <template>
