@@ -1,0 +1,7 @@
+default_permissions = "secure_workspace"
+
+[permissions.secure_workspace]
+extends = ":workspace"
+
+[permissions.secure_workspace.filesystem.":workspace_roots"]
+".dev.vars" = "deny"
