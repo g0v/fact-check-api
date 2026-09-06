@@ -1,6 +1,6 @@
 import type { UpstreamStage } from "../types/fact-check";
 
-export type LogValue = string | number | boolean | null | string[] | (number | null)[];
+export type LogValue = string | number | boolean | null | string[] | boolean[] | (number | null)[];
 export type Logger = (event: Record<string, LogValue>) => void;
 
 export function createStageRunner(requestId: string, log: Logger) {

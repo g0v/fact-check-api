@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { api } from "../src/api";
-import { MODELS } from "../src/api/config";
+import { LIMITS, MODELS } from "../src/api/config";
 import { factCheck } from "../src/api/services/fact-check";
 import { claim, emptySynthesisOutput, harness, relevanceOutput } from "./helpers";
 
@@ -42,6 +42,18 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     ]);
     expect(JSON.stringify(synthesis)).not.toContain("國中小性教育");
     const logs = JSON.stringify(h.log.mock.calls);
+    expect(h.log).toHaveBeenCalledWith({
+      event: "relevance",
+      request_id: result.meta.request_id,
+      candidate_count: 2,
+      article_ids: relevanceOutput.results.map((item) => item.article_id),
+      relevant_flags: relevanceOutput.results.map((item) => item.relevant),
+      relevance_scores: relevanceOutput.results.map((item) => item.relevance),
+      relevance_threshold: LIMITS.relevanceThreshold,
+      selection_limit: LIMITS.relevant,
+      selected_count: 1,
+      selected_article_ids: ["relevant"],
+    });
     expect(logs).not.toContain(claim);
     expect(logs).not.toContain("your-openrouter-api-key");
     expect(logs).not.toContain("測試人工查核說明");

@@ -1,3 +1,4 @@
+import { LIMITS } from "../config";
 import type { CofactsCandidate, RelevantCandidate } from "../types/cofacts";
 import type {
   ApiBindings,
@@ -100,8 +101,13 @@ export async function factCheck(
       log({
         event: "relevance",
         request_id: requestId,
+        candidate_count: candidates.length,
         article_ids: relevance.results.map((item) => item.articleId),
+        relevant_flags: relevance.results.map((item) => item.relevant),
         relevance_scores: relevance.results.map((item) => item.relevance),
+        relevance_threshold: LIMITS.relevanceThreshold,
+        selection_limit: LIMITS.relevant,
+        selected_count: selected.length,
         selected_article_ids: selected.map((item) => item.articleId),
       });
     } catch {
