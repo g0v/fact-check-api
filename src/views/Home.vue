@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NavBar from "../components/NavBar.vue";
+import FactCheckForm from "../components/FactCheckForm.vue";
 
 const props = defineProps<{ origin: string }>();
 const claim = "非學校型態學生，國中小以下目前沒有普遍補助";
@@ -53,7 +54,7 @@ const verdicts = [
 </script>
 
 <template>
-  <a class="skip-link" href="#quickstart">跳至使用說明</a>
+  <a class="skip-link" href="#try-it">跳至查核表單</a>
   <NavBar current="home" />
   <main class="docs-page">
     <header class="hero">
@@ -65,7 +66,7 @@ const verdicts = [
           結果。也能附上來源網址，補充查核背景。
         </p>
         <div class="hero-actions">
-          <a class="button" href="#quickstart">開始串接 <span aria-hidden="true">↗</span></a>
+          <a class="button" href="#try-it">立即查核 <span aria-hidden="true">↓</span></a>
           <a class="text-link" href="#response">閱讀回應格式 <span aria-hidden="true">↓</span></a>
         </div>
       </div>
@@ -83,6 +84,8 @@ const verdicts = [
         </div>
       </div>
     </header>
+
+    <div id="fact-check-app"><FactCheckForm /></div>
 
     <div class="docs-layout">
       <aside class="docs-sidebar">

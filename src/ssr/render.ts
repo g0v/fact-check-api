@@ -1,6 +1,6 @@
 import { createSSRApp, type Component } from "vue";
 import { renderToString } from "@vue/server-renderer";
-import { renderHeadTags, type HeadConfig } from "./heads";
+import { escapeHtml, renderHeadTags, type HeadConfig } from "./heads";
 
 // 把 Vue 元件 + props + head 組成完整 HTML 字串
 // 流程：createSSRApp(元件, props) → renderToString(產出 body) → 套上 head 模板
@@ -8,6 +8,7 @@ export async function renderPage(
   component: Component,
   props: Record<string, unknown>,
   head: HeadConfig,
+  clientScript?: string,
 ): Promise<string> {
   const app = createSSRApp(component, props);
   const bodyHtml = await renderToString(app);
@@ -21,6 +22,7 @@ export async function renderPage(
   </head>
   <body>
     <div id="app">${bodyHtml}</div>
+    ${clientScript ? `<script type="module" src="${escapeHtml(clientScript)}"></script>` : ""}
   </body>
 </html>`;
 }

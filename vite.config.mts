@@ -9,6 +9,16 @@ export default defineConfig(({ command }) => ({
   // 建置不讀取本機環境檔；secret 僅於開發執行期或部署環境注入。
   envDir: false,
   publicDir: "public",
+  environments: {
+    client: {
+      build: {
+        rollupOptions: {
+          input: "src/client/home.ts",
+          output: { entryFileNames: "assets/home.js" },
+        },
+      },
+    },
+  },
   plugins: [
     ...(isVitest
       ? []
