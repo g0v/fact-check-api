@@ -59,7 +59,9 @@ describe("查核結果快取", () => {
     expect(entry.result).not.toHaveProperty("url");
     const key = cache.put.mock.calls[0][0];
     expect(key.url).toMatch(/\/v1\/[a-f0-9]{64}$/);
-    expect([...key.headers]).toEqual([]);
+    const headerNames: string[] = [];
+    key.headers.forEach((_value, name) => headerNames.push(name));
+    expect(headerNames).toEqual([]);
     expect(JSON.stringify(h.log.mock.calls)).not.toContain(claim);
     expect(JSON.stringify(h.log.mock.calls)).not.toContain("your-openrouter-api-key");
   });

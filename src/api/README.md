@@ -4,8 +4,8 @@
 
 ## 閱讀順序
 
-1. `index.ts`：request ID、禁止快取、統一錯誤回應。
-2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `factCheck()`；`middleware/same-origin.ts` 在讀取 POST 本文前檢查 Origin。
+1. `index.ts`：request ID、禁止瀏覽器快取、統一錯誤回應。
+2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `cachedFactCheck()`；`middleware/same-origin.ts` 在讀取 POST 本文前檢查 Origin。
 3. `services/fact-check.ts`：完整流程、平行工作與部分失敗策略。
 4. `services/`：安全分類、候選搜尋、批次初篩、詳細證據、URL 背景、Gemma 綜整。
 5. `prompts/`、`schemas/`、`types/`：模型職責、輸入輸出契約與資料型別。
@@ -29,6 +29,8 @@
 | Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                    |
 
 ## Safeguard 呼叫契約
+
+`cachedFactCheck()` 未命中時才執行以下完整查核流程；有效快取沿用當時的安全分類與證據結果。
 
 `services/moderation.ts` 參考 `civic-talk-hono/src/moderation/service.ts` 已實測的 OpenRouter 寫法，使用 `response_format.type: "json_schema"`、`strict: true`、`reasoning: { effort: "low" }`、`max_tokens: 1600` 與 `temperature: 0`。推理 token 也會占用輸出額度；不可只調整 `max_tokens` 而忽略推理設定。
 
@@ -64,6 +66,23 @@ Schema 使用查核 API 的 `decision`（`allow`／`review`／`block`）、`cate
 上述紀錄只包含固定訊息、布林值、數值與允許的完成代碼，不記錄金鑰值或長度、headers、使用者原文、模型 content／reasoning、上游錯誤訊息或本文。`tests/moderation-logging.test.ts` 覆蓋設定缺少、傳輸失敗、輸出驗證與紀錄隱私。
 
 Workers 的 `fetch` 不支援 `redirect: "error"`，使用時會在連線前拋出 `TypeError`，也可能呈現為幾毫秒內的 `network_error`。共用 JSON 請求與 DNS 查詢使用 `redirect: "manual"`，再透過 `response.ok` 拒絕重新導向等非成功狀態；不自動將授權標頭送往重新導向目標。
+
+## Worker 查核結果快取
+
+`services/cached-fact-check.ts` 實作 [議題 #7](https://github.com/g0v/fact-check-api/issues/7)，在輸入與 Origin 驗證後、整個 pipeline 之前查詢 `caches.open("fact-check-results")`。命中時不呼叫 Safeguard、Cofacts 或 Workers AI；只有先前 `completed`、無警告且結構有效的結果可被採用。
+
+- 預設 TTL 為 3,600 秒，另在 payload 檢查建立時間，逾期、未來時間或格式錯誤視為不可用；命中不延長期限。
+- 合成 GET key 使用目前站台 origin 與 SHA-256，摘要輸入包含正規化後的 `text`、`url`、`MODELS`、`LIMITS`、三份提示及 `RESULT_CACHE.version`。GET／POST 共用，文字內部空白、標點與字形不合併。
+- 模型、提示及門檻變更自動產生新 key；其他查核邏輯、輸出參數或回應契約改動時應遞增 `RESULT_CACHE.version`，避免沿用舊結果。金鑰不參與 key，不需為金鑰輪替清快取。
+- 儲存內容含查核證據與綜整結果，但移除輸入回填欄位、原 request ID 與快取 metadata；命中時回填本次輸入及新的 request ID。此機制仍會在 Worker 端保留查核結果至 TTL 到期或被提早移除。
+- 只有內部快取用的 Response 帶 `public, max-age=3600`。對外回應持續 `Cache-Control: no-store`，不提供讀取合成快取 URL 的公開路由。
+- Worker 使用 `executionCtx.waitUntil()` 承接寫入。開啟、讀取與寫入各有 1 秒等待上限；任何快取問題不改變查核結果、不新增 `meta.warnings`，也不回傳快取例外文字。
+- JSON 儲存與讀取上限沿用 `LIMITS.upstreamBytes`；過大的結果只略過快取。沒有 Cache API 的 Node 測試環境直接執行原 pipeline。
+- 不做跨請求的鎖定或相同進行中請求合併；同時出現的冷快取請求可能各自呼叫模型。背景寫入尚未完成時重送亦可能 miss。
+
+成功回應含 `X-Fact-Check-Cache: HIT/MISS/BYPASS` 與 `meta.cache.status`。命中另含 `cached_at`／`expires_at`，首頁逐項說明這些欄位；原始證據與分數不重新計算。Log 只新增 `event: "cache"`、request ID、操作（`read`／`write`／`schedule`）與狀態，不輸出 hash、原文、網址或 credential。`stored` 表示 Cache API 的寫入呼叫已完成，不保證平台一定保留到期。
+
+[Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/) 的內容不跨資料中心複寫，平台可能提早移除；Dashboard／Playground 預覽不保證可觀察命中。`tests/result-cache.test.ts` 覆蓋命中、過期、隔離、故障回退、背景寫入與同源限制；使用模擬儲存，不代表已部署驗收。
 
 ## 瀏覽器來源限制
 

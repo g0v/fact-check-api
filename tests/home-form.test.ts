@@ -218,6 +218,16 @@ describe("首頁表單與結果（不使用瀏覽器自動化）", () => {
     expect(fieldInfo("__proto__").label).toBe("額外欄位");
   });
 
+  it("快取命中資訊有中文含義並保留原始時間", async () => {
+    const cache = { status: "hit", cached_at: "2026-09-07T00:00:00.000Z", expires_at: "2026-09-07T01:00:00.000Z" };
+    const html = await renderToString(createSSRApp(FactCheckValue, { value: { meta: { cache } }, path: "" }));
+    expect(html).toContain("使用快取結果");
+    expect(html).toContain("本次不重跑模型");
+    expect(html).toContain(cache.cached_at);
+    expect(html).toContain(cache.expires_at);
+    expect(html).not.toContain("額外欄位");
+  });
+
   it("來源網址僅允許 HTTP／HTTPS，危險內容保持純文字", async () => {
     expect(safeSourceLink("related_checks[].url", "javascript:alert(1)")).toBeUndefined();
     expect(safeSourceLink("url", "data:text/html,example")).toBeUndefined();

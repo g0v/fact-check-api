@@ -158,6 +158,22 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
 
 Cofacts 的 `retrieval_score` 只是搜尋排序，不是百分比、機率或相關度；`relevance_score` 才是語意相關程度。兩者都不是真假判斷，不可直接換算 factuality。
 
+## 相同問題的 Worker 快取
+
+GET／POST 通過原有驗證後，共用 Worker 端的查核結果快取，預設保留 **1 小時**。文字去除首尾空白、網址經 API 正規化後完全相同才會命中；換網址或修改內文會重新查核。只儲存 `completed` 且沒有警告的結果，包括「證據不足」；`partial`、`blocked` 與錯誤不儲存。
+
+命中時重用原有安全分類、證據與模型結果，不重新呼叫上游；`X-Request-Id` 與 `meta.request_id` 仍是本次的新識別碼。`Cache-Control: no-store` 保持不變，瀏覽器不儲存查核回應。Worker 快取與瀏覽器快取分開管理。
+
+| `X-Fact-Check-Cache` | `meta.cache.status` | 意義 |
+| --- | --- | --- |
+| `HIT` | `hit` | 已重用快取；另附 `cached_at` 與 `expires_at`（UTC），首頁會顯示中文說明。 |
+| `MISS` | `miss` | 未取得可用快取，執行本次查核；不代表一定已成功寫入快取。 |
+| `BYPASS` | `bypass` | 快取服務未提供或無法開啟，照常執行查核。 |
+
+手動驗證時，可在首頁送出完全相同的文字與網址兩次，預期第二次出現 `hit`。寫入由 `waitUntil` 在背景執行，極短時間內重送、不同資料中心或快取被提早移除時，仍可能重新查核。不需新增 KV binding 或 secret。
+
+快取是資料中心內的儲存，不保證跨地點命中；行為依 [Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/) 而定。TTL、命名空間與版本設定見 `src/api/config.ts` 的 `RESULT_CACHE`，實作與限制見 [API 維護指南](./src/api/README.md#worker-查核結果快取)。
+
 ## 狀態與錯誤
 
 HTTP 200 時仍需檢查 `status`：
