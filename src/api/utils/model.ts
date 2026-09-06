@@ -1,6 +1,6 @@
 import { record, array, string } from "./validation";
 
-// gpt-oss 使用 response；Gemma 與 OpenRouter 使用 chat completion choices。
+// Workers AI 的 gpt-oss 使用 response；Gemma 使用 chat completion choices。
 export function parseModelJson(value: unknown): unknown {
   const output = record(value);
   let content: string;

@@ -49,8 +49,11 @@ export async function factCheck(
     request_id: requestId,
     text_length: [...input.text].length,
     has_url: Boolean(input.url),
+    openrouter_api_key_present: env.OPENROUTER_API_KEY != null,
   });
-  const moderation = await stage("moderation", () => moderate(input.text, env, fetcher));
+  const moderation = await stage("moderation", () =>
+    moderate(input.text, env, fetcher, (event) => log({ ...event, request_id: requestId })),
+  );
   log({ event: "moderation", request_id: requestId, decision: moderation.decision });
   if (moderation.decision === "block") {
     return {

@@ -108,7 +108,8 @@ export async function assertPublicDns(
       endpoint.searchParams.set("type", type);
       const response = await fetcher(endpoint, {
         headers: { Accept: "application/dns-json" },
-        redirect: "error",
+        // Workers 僅支援 follow／manual；DNS 服務的重新導向由狀態檢查拒絕。
+        redirect: "manual",
         signal,
       });
       if (!response.ok) {

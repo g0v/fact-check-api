@@ -28,6 +28,43 @@
 | URL                       | 保留警告，Cofacts 照常；搜尋成功但沒有證據時交 Gemma 回證據不足 |
 | Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                    |
 
+## Safeguard 呼叫契約
+
+`services/moderation.ts` 參考 `civic-talk-hono/src/moderation/service.ts` 已實測的 OpenRouter 寫法，使用 `response_format.type: "json_schema"`、`strict: true`、`reasoning: { effort: "low" }`、`max_tokens: 1600` 與 `temperature: 0`。推理 token 也會占用輸出額度；不可只調整 `max_tokens` 而忽略推理設定。
+
+Schema 使用查核 API 的 `decision`（`allow`／`review`／`block`）、`categories`、`reason`；分類政策保留查核例外，真假判定由後續 Gemma 負責。只接受無 choice error、`finish_reason: "stop"` 且 `message.content` 為有效判定 JSON 的回應；截斷、缺少完成標記或格式錯誤一律回 HTTP 502，停止下游。
+
+`tests/moderation.test.ts` 固定驗證請求參數與異常回應處理；使用模擬傳輸，不代表 fact-check-api 已通過真實模型實測。
+
+### Safeguard 除錯紀錄
+
+查核 API 預設透過 `console.info` 輸出結構化 JSON，不需另外開啟 debug 設定。用同一個 `request_id` 依序查看：
+
+1. `request.openrouter_api_key_present`：`factCheck` 收到的 Worker binding 是否有設定值。
+2. `moderation_config`：`step: "before_read"` 在讀取 binding 前輸出；`step: "after_read"` 記錄 `api_key_present`、`api_key_is_string` 與 `api_key_configured`。最後一項須為非空白字串才為 `true`；這不代表金鑰已通過 OpenRouter 驗證。
+3. `moderation_request`：設定檢查通過，準備送出；包含模型名稱、timeout 與推理／輸出參數。
+4. `moderation_http_response`：已收到上游 headers，包含 `upstream_status` 與當時耗時。
+5. `moderation_response`：已解析上游 JSON，包含 choice 數量、`finish_reason`、content 長度、有無推理、數值錯誤碼與 token 用量。缺少或無效的數值記為 `null`；未知完成代碼記為 `unknown`。
+6. `moderation_error`：失敗原因與可用的診斷欄位；原有 `stage`／API 錯誤紀錄仍保留，對外仍回 HTTP 502。
+
+| `moderation_error.reason`                                                             | 排查方向                                                                                                        |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `missing_api_key`                                                                     | Worker binding 缺少、不是字串或只有空白；請確認目前執行環境的 `OPENROUTER_API_KEY` 設定。                       |
+| `network_error`／`timeout`                                                            | 請求參數、連線失敗或超過期限；`upstream_status: null` 表示尚未收到 HTTP 回應，已有狀態則可能卡在讀取本文。      |
+| `http_error`                                                                          | OpenRouter 回非成功狀態；查看 `upstream_status`，例如 401、429 或 5xx。                                         |
+| `response_read_error`／`response_too_large`／`invalid_response_json`                  | HTTP 回應本文讀取、大小限制或外層 JSON 格式問題。                                                               |
+| `upstream_error`／`choice_error`                                                      | HTTP 成功但回應含錯誤物件；查看 `upstream_error_code`／`choice_error_code`。                                    |
+| `incomplete_completion`                                                               | `finish_reason` 缺少或不是 `stop`；若為 `length`，搭配 `completion_tokens` 與 `reasoning_tokens` 檢查輸出額度。 |
+| `invalid_completion`／`invalid_content`／`invalid_content_json`／`invalid_moderation` | 分別是 completion 結構、content 空白／型別／長度、content JSON 或判定 schema 問題。                             |
+
+例如讀取後出現 `api_key_present: false`、`api_key_configured: false`，接著出現 `reason: "missing_api_key"`，代表尚未呼叫 OpenRouter。若已出現 `moderation_request`，則繼續查看 HTTP 狀態與回應診斷。僅憑舊紀錄的 1 ms 失敗尚不能判定金鑰是否缺少。
+
+本機 `vp run dev` 由 Cloudflare 外掛交給 Wrangler 載入與 `wrangler.jsonc` 同目錄的 `.dev.vars`；Vite 的 `envDir: false` 不會停用這條載入路徑。若啟動後才建立 `.dev.vars`，請先儲存檔案，完全停止並重新執行 `vp run dev`，再確認 `api_key_configured`。目前安裝的外掛只針對設定檔的 `change` 事件重新啟動，新增檔案不一定觸發載入。若使用 `CLOUDFLARE_ENV`，也須確認對應 `.dev.vars.<環境名稱>` 是否覆蓋一般設定。
+
+上述紀錄只包含固定訊息、布林值、數值與允許的完成代碼，不記錄金鑰值或長度、headers、使用者原文、模型 content／reasoning、上游錯誤訊息或本文。`tests/moderation-logging.test.ts` 覆蓋設定缺少、傳輸失敗、輸出驗證與紀錄隱私。
+
+Workers 的 `fetch` 不支援 `redirect: "error"`，使用時會在連線前拋出 `TypeError`，也可能呈現為幾毫秒內的 `network_error`。共用 JSON 請求與 DNS 查詢使用 `redirect: "manual"`，再透過 `response.ok` 拒絕重新導向等非成功狀態；不自動將授權標頭送往重新導向目標。
+
 ## 瀏覽器來源限制
 
 同源依請求 URL 的協定、主機與連接埠判斷，適用部署網域及本機開發，不新增 secret 或白名單設定。不使用 Referer、Host、X-Forwarded-Host 等標頭替代 Origin，也不允許 `Origin: null`。標準 Origin 不含路徑或尾端斜線。
@@ -63,6 +100,8 @@ vp run typecheck
 
 一般測試用假的 OpenRouter／Cofacts／Workers AI 傳輸，覆蓋完整 Hono pipeline、安全 gate、門檻、錯誤 fallback、分數分離與 SSRF 邊界。HTML extraction 另外以真正的本機 workerd 執行，使用 `workerd test` 直接呼叫測試 handler，不開啟本機 HTTP socket。
 
+`tests/http-worker.test.ts` 將實際 Safeguard 與 DNS 程式碼打包後交給 workerd，驗證原生 `fetch` 可送出請求且拒絕上游重新導向。全部 outbound 由記憶體中的假上游回應，不讀取環境檔，也不連線外部服務。
+
 `tests/fixtures/relevance-cases.json` 保存藍圖的四個 ID 與標註；一般回歸測試只驗證模型輸出的處理邏輯，不代表模型已通過語意驗收。真實回歸會取得原文，並透過 Workers AI remote binding 呼叫模型：
 
 ```bash
@@ -75,7 +114,7 @@ FACT_CHECK_LIVE=1 vp test tests/relevance.live.test.ts
 
 Vite build 禁用環境檔讀取，並清除僅供 preview 複製 secret 使用的外掛 `configPath`；產物不包含本機 secret。本機開發仍由 Cloudflare 外掛在執行期載入 `.dev.vars`。
 
-程式 log 只包含 request ID、文字長度、有無 URL、安全決策、候選 ID、搜尋／相關性分數、證據數量、最終判斷及階段時間，不紀錄使用者原文、完整 URL、上游錯誤 body 或 credential。Cloudflare 平台的請求紀錄由平台設定控制；敏感查核內容建議使用 POST，以免出現在網址歷史或 access log。
+程式 log 包含 request ID、文字長度、有無 URL、安全決策、候選 ID、搜尋／相關性分數、證據數量、最終判斷及階段時間，另有上述 Safeguard 設定與回應診斷；不紀錄使用者原文、完整 URL、上游錯誤 body 或 credential。Cloudflare 平台的請求紀錄由平台設定控制；敏感查核內容建議使用 POST，以免出現在網址歷史或 access log。
 
 ## 核對來源
 
