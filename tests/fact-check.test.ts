@@ -176,7 +176,7 @@ describe("Hono GET／POST 介面", () => {
         method,
         ...(method === "POST"
           ? {
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", Origin: "http://localhost" },
               body: JSON.stringify({ text: `  ${claim}  ` }),
             }
           : {}),
@@ -208,7 +208,7 @@ describe("Hono GET／POST 介面", () => {
       "/fact-check",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost" },
         body: JSON.stringify(body),
       },
       h.env,

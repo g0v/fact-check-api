@@ -5,7 +5,7 @@
 ## 閱讀順序
 
 1. `index.ts`：request ID、禁止快取、統一錯誤回應。
-2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `factCheck()`。
+2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `factCheck()`；`middleware/same-origin.ts` 在讀取 POST 本文前檢查 Origin。
 3. `services/fact-check.ts`：完整流程、平行工作與部分失敗策略。
 4. `services/`：安全分類、候選搜尋、批次初篩、詳細證據、URL 背景、Gemma 綜整。
 5. `prompts/`、`schemas/`、`types/`：模型職責、輸入輸出契約與資料型別。
@@ -14,6 +14,7 @@
 ## 已確認的 MVP 契約
 
 - `text` trim 後必填，最多 10,000 個 Unicode code point；URL 最長 2,048 個 UTF-16 code unit。
+- POST 的 Origin 必須與請求 URL 的 origin 完全一致；跨來源、缺少 Origin 或 `Origin: null` 回 HTTP 403／`FORBIDDEN_ORIGIN`，不呼叫上游。此端點的 OPTIONS 也回 403，不提供跨來源 CORS 授權。
 - POST 必須為 JSON；body 最多 128,000 bytes。URL 選填，拒絕空字串、非 HTTP／HTTPS、內網位址及帶帳號密碼的網址。
 - `allow`／`review` 繼續，`review` 留在 moderation 中；`block` 回 HTTP 200、`status: blocked`，分數與 verdict 為 `null`，不執行下游。
 - 正常回 HTTP 200、`status: completed`；有可恢復的上游失敗則回 HTTP 200、`status: partial`，原因在 `meta.warnings`。
@@ -26,6 +27,12 @@
 | Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                     |
 | URL                       | 保留警告，Cofacts 照常；搜尋成功但沒有證據時交 Gemma 回證據不足 |
 | Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                    |
+
+## 瀏覽器來源限制
+
+同源依請求 URL 的協定、主機與連接埠判斷，適用部署網域及本機開發，不新增 secret 或白名單設定。不使用 Referer、Host、X-Forwarded-Host 等標頭替代 Origin，也不允許 `Origin: null`。標準 Origin 不含路徑或尾端斜線。
+
+本站前端以相對 URL 執行 POST fetch，Origin 由瀏覽器設定；不要把金鑰放到前端。CLI 維護測試可明確提供同源 Origin，範例見 README。此限制不驗證呼叫者身分，不能防止非瀏覽器程式自行設定 Origin；GET 保持原有公開行為。
 
 ## 證據契約
 

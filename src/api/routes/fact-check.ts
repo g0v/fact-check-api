@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { LIMITS } from "../config";
+import { forbiddenOrigin, sameOriginPost } from "../middleware/same-origin";
 import { parseInput } from "../schemas/fact-check";
 import { factCheck } from "../services/fact-check";
 import type { ApiEnv } from "../types/fact-check";
@@ -7,6 +8,13 @@ import { ApiError } from "../utils/errors";
 import { readLimitedText, withTimeout } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
+
+factCheckRoutes.use("/fact-check", sameOriginPost);
+
+// 同源請求不需要 CORS 預檢；此端點不提供跨來源授權標頭。
+factCheckRoutes.options("/fact-check", () => {
+  throw forbiddenOrigin();
+});
 
 factCheckRoutes.get("/fact-check", async (c) => {
   if ((c.req.queries("text")?.length ?? 0) > 1 || (c.req.queries("url")?.length ?? 0) > 1) {

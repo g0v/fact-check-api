@@ -4,7 +4,7 @@ export class ApiError extends Error {
   constructor(
     public readonly code: string,
     message: string,
-    public readonly status: 400 | 413 | 500 | 502,
+    public readonly status: 400 | 403 | 413 | 500 | 502,
     public readonly stage?: UpstreamStage,
   ) {
     super(message);

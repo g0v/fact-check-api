@@ -5,9 +5,15 @@ const props = defineProps<{ origin: string }>();
 const claim = "非學校型態學生，國中小以下目前沒有普遍補助";
 const endpoint = `${props.origin}/api/fact-check`;
 const shellEndpoint = `'${endpoint.replace(/'/g, "'\\''")}'`;
-const postExample = `curl ${shellEndpoint} \\
-  -H 'Content-Type: application/json' \\
-  --data '${JSON.stringify({ text: claim })}'`;
+const postExample = `const response = await fetch("/api/fact-check", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    text: "${claim}"
+  })
+});
+const result = await response.json();
+console.log(result);`;
 const getExample = `curl --get ${shellEndpoint} \\
   --data-urlencode 'text=${claim}'`;
 const urlExample = `curl --get ${shellEndpoint} \\
@@ -66,7 +72,7 @@ const verdicts = [
       <div class="endpoint-panel" aria-label="API 端點一覽">
         <p class="panel-label">一個查核端點，兩種呼叫方式</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/fact-check</code></div>
-        <p class="endpoint-note">以 JSON 傳入文字與選填網址。</p>
+        <p class="endpoint-note">限本站同源前端，以 JSON 傳入文字與選填網址。</p>
         <div class="endpoint-row">
           <span class="method method-get">GET</span><code>/api/fact-check</code>
         </div>
@@ -96,13 +102,17 @@ const verdicts = [
           <p class="section-number">01 / 開始呼叫</p>
           <h2 id="quickstart-title">第一個查核請求</h2>
           <p>
-            複製下方指令，在終端機呼叫本站 API。將
+            下方範例供本站前端使用，也可在本站頁面的開發者工具 Console 執行。將
             <code>text</code> 換成你要查核的具體主張；呼叫前，服務維運者需先完成模型設定。
           </p>
           <div class="code-heading">
-            <span><span class="method">POST</span> 傳入 JSON</span><span>cURL</span>
+            <span><span class="method">POST</span> 同源 JSON 請求</span><span>JavaScript</span>
           </div>
-          <pre tabindex="0" aria-label="POST 查核指令"><code>{{ postExample }}</code></pre>
+          <pre tabindex="0" aria-label="本站前端 POST 查核範例"><code>{{ postExample }}</code></pre>
+          <p class="note">
+            POST 必須來自本站相同協定、主機與連接埠；Origin 由瀏覽器自動附上。 跨來源、缺少 Origin
+            或 Origin 為 null 都回 403，不開放跨來源 CORS 預檢。
+          </p>
           <p class="note">
             內容較長或包含敏感資訊時，建議使用 POST，避免文字出現在網址歷史或 access
             log。請勿在呼叫端傳入 OpenRouter 金鑰。
@@ -266,6 +276,11 @@ const verdicts = [
                   <th scope="row">400</th>
                   <td><code>INVALID_INPUT</code></td>
                   <td>依 message 修正文字、網址、JSON 格式或請求大小。</td>
+                </tr>
+                <tr>
+                  <th scope="row">403</th>
+                  <td><code>FORBIDDEN_ORIGIN</code></td>
+                  <td>POST 來源不符合本站同源限制，或發送了不支援的 OPTIONS 預檢。</td>
                 </tr>
                 <tr>
                   <th scope="row">413</th>

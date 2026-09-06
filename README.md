@@ -33,14 +33,35 @@ vp run dev
 | GET  | `/`               | API 使用說明首頁                   |
 | GET  | `/health`         | 回傳 `{"status":"ok"}`，不呼叫上游 |
 | GET  | `/api/fact-check` | 以 query string 傳入參數           |
-| POST | `/api/fact-check` | 以 JSON 傳入相同參數               |
+| POST | `/api/fact-check` | 限本站同源前端，以 JSON 傳入參數   |
 
 以下指令使用本機網址；部署後請替換為你的服務位址。
 
-### POST：以 JSON 查核
+### POST：本站前端以 JSON 查核
+
+POST 只接受與本站完全相同的 `Origin`（協定、主機、連接埠均須相同）。請在本站前端使用相對網址，瀏覽器會自動附上 Origin：
+
+```javascript
+const response = await fetch("/api/fact-check", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    text: "非學校型態學生，國中小以下目前沒有普遍補助",
+  }),
+});
+const result = await response.json();
+console.log(result);
+```
+
+跨來源、缺少 Origin、`Origin: null` 都回 HTTP 403／`FORBIDDEN_ORIGIN`，且不進入查核流程。此端點的 OPTIONS 預檢也回 403，不回傳 `Access-Control-Allow-*` 標頭；同源瀏覽器呼叫不需要 CORS 預檢。
+
+這是瀏覽器來源限制，不是身分驗證；非瀏覽器程式可自行設定 Origin。GET 仍保留原有公開呼叫行為。CORS 的作用範圍見 [MDN 說明](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)。
+
+本機維護測試若使用 curl，需明確帶入與目標位址一致的 Origin：
 
 ```bash
 curl 'http://localhost:5173/api/fact-check' \
+  -H 'Origin: http://localhost:5173' \
   -H 'Content-Type: application/json' \
   --data '{"text":"非學校型態學生，國中小以下目前沒有普遍補助"}'
 ```
@@ -161,6 +182,7 @@ HTTP 200 時仍需檢查 `status`：
 | HTTP | error                  | 處理方式                                                      |
 | ---- | ---------------------- | ------------------------------------------------------------- |
 | 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤 |
+| 403  | `FORBIDDEN_ORIGIN`     | POST 來源不符本站、未提供 Origin，或發送不支援的 OPTIONS 預檢 |
 | 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                              |
 | 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                |
 | 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                      |
@@ -216,6 +238,7 @@ src/
 │   ├── index.ts             # middleware 與錯誤回應
 │   ├── config.ts            # 模型、門檻與資源限制
 │   ├── routes/
+│   ├── middleware/          # POST 同源 Origin 檢查
 │   ├── services/            # 各查核階段與 orchestrator
 │   ├── prompts/
 │   ├── schemas/
