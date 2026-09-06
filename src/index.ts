@@ -3,15 +3,20 @@ import HomeView from "./views/Home.vue";
 import AboutView from "./views/About.vue";
 import { renderPage } from "./ssr/render";
 import { headForHome, headForAbout } from "./ssr/heads";
+import { api } from "./api";
+import type { ApiBindings } from "./api/types/fact-check";
 
 // Cloudflare Worker 綁定型別；ASSETS 在 wrangler.jsonc 對應到 ./public/
-type Bindings = {
+type Bindings = ApiBindings & {
   ASSETS?: {
     fetch: (request: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   };
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+app.get("/health", (c) => c.json({ status: "ok" }));
+app.route("/api", api);
 
 // 純 JSON / 文字 API：直接回傳，不走 SSR
 app.get("/api/hello", (c) => c.text("Hello World!"));

@@ -1,0 +1,11 @@
+{
+  "claim": "非學校型態學生，國中小以下目前沒有普遍補助",
+  "source": "design/fact_check_MVP_plan.md 第 45–46 節",
+  "note": "ID 與標註來自工程藍圖；本檔未虛構文章全文。live 測試會從 Cofacts 取得原文。",
+  "candidates": [
+    { "id": "AVqLDjRlyrDaTqlmmp7J", "expected": false, "reason": "討論國中小性教育" },
+    { "id": "3el110m0jufh2", "expected": false, "reason": "討論高雄停班停課" },
+    { "id": "3vuve0stdu54e", "expected": false, "reason": "討論同志教育與公投" },
+    { "id": "3fygvjl81j6co", "expected": true, "reason": "直接討論國中小自學學生補助" }
+  ]
+}
