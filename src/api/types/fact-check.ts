@@ -74,6 +74,11 @@ export type FactCheckResponse = FactCheckInput & {
     cofacts_ai_checks: number;
     url_context_used: boolean;
     warnings: Warning[];
+    cache?: {
+      status: "hit" | "miss" | "bypass";
+      cached_at?: string;
+      expires_at?: string;
+    };
   };
 };
 

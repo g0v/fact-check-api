@@ -87,6 +87,23 @@ const fields: Record<string, FieldInfo> = {
     label: "是否使用網址背景",
     description: "true：已使用提供網址的文字作為背景；false：沒有使用。",
   },
+  "meta.cache": {
+    label: "Worker 快取",
+    description: "是否重用先前完整成功的查核；命中時保留原有證據與分數，本次不重跑模型。",
+  },
+  "meta.cache.status": {
+    label: "快取狀態",
+    description:
+      "hit：命中快取；miss：未取得可用快取，重新查核；bypass：未使用快取服務。miss 不保證結果已成功寫入快取。",
+  },
+  "meta.cache.cached_at": {
+    label: "快取建立時間",
+    description: "這份查核結果存入快取的 UTC 時間；並非本次重新完成查核的時間。",
+  },
+  "meta.cache.expires_at": {
+    label: "快取到期時間",
+    description: "這份結果可重用的期限；快取也可能提早被移除，命中不會延長期限。",
+  },
   "meta.warnings": {
     label: "流程警告",
     description: "可恢復的上游失敗；空陣列表示本次沒有回報流程警告。",
@@ -110,6 +127,7 @@ const fields: Record<string, FieldInfo> = {
 };
 
 const labels: Record<string, Record<string, string>> = {
+  "meta.cache.status": { hit: "使用快取結果", miss: "本次重新查核", bypass: "未使用快取服務" },
   status: {
     completed: "流程完成",
     partial: "部分完成",

@@ -4,6 +4,14 @@ export const MODELS = {
   synthesis: "@cf/google/gemma-4-26b-a4b-it",
 } as const;
 
+export const RESULT_CACHE = {
+  namespace: "fact-check-results",
+  // 查核邏輯或回應契約改動時遞增；模型、提示與 LIMITS 另外自動納入快取鍵。
+  version: "v1",
+  ttlSeconds: 3600,
+  timeoutMs: 1000,
+} as const;
+
 export const LIMITS = {
   text: 10_000,
   url: 2_048,

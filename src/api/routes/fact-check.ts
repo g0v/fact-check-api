@@ -1,15 +1,32 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { LIMITS } from "../config";
 import { forbiddenOrigin, sameOriginPost } from "../middleware/same-origin";
 import { parseInput } from "../schemas/fact-check";
-import { factCheck } from "../services/fact-check";
-import type { ApiEnv } from "../types/fact-check";
+import { cachedFactCheck } from "../services/cached-fact-check";
+import type { ApiEnv, FactCheckInput } from "../types/fact-check";
 import { ApiError } from "../utils/errors";
 import { readLimitedText, withTimeout } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
 
 factCheckRoutes.use("/fact-check", sameOriginPost);
+
+async function respond(c: Context<ApiEnv>, input: FactCheckInput) {
+  let waitUntil: ((task: Promise<void>) => void) | undefined;
+  try {
+    const context = c.executionCtx;
+    waitUntil = (task) => context.waitUntil(task);
+  } catch {
+    /* 一般 Node 單元測試沒有 Worker execution context。 */
+  }
+  const result = await cachedFactCheck(input, c.env, {
+    origin: new URL(c.req.url).origin,
+    requestId: c.get("requestId"),
+    waitUntil,
+  });
+  c.header("X-Fact-Check-Cache", result.meta.cache!.status.toUpperCase());
+  return c.json(result);
+}
 
 // 同源請求不需要 CORS 預檢；此端點不提供跨來源授權標頭。
 factCheckRoutes.options("/fact-check", () => {
@@ -21,7 +38,7 @@ factCheckRoutes.get("/fact-check", async (c) => {
     throw new ApiError("INVALID_INPUT", "text 與 url 不得重複提供。", 400);
   }
   const input = parseInput({ text: c.req.query("text"), url: c.req.query("url") });
-  return c.json(await factCheck(input, c.env, { requestId: c.get("requestId") }));
+  return respond(c, input);
 });
 
 factCheckRoutes.post("/fact-check", async (c) => {
@@ -46,5 +63,5 @@ factCheckRoutes.post("/fact-check", async (c) => {
     throw new ApiError("INVALID_INPUT", "JSON 格式不正確。", 400);
   }
   const input = parseInput(value);
-  return c.json(await factCheck(input, c.env, { requestId: c.get("requestId") }));
+  return respond(c, input);
 });
