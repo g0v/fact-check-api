@@ -8,7 +8,7 @@ export interface HeadConfig {
   meta?: MetaEntry[];
 }
 
-const SITE_NAME = "Hono Vue SSR Template";
+const SITE_NAME = "Fact Check API";
 
 // 統一產 OG / Twitter Card meta，避免每條路由都自己寫一次
 function buildOg(title: string, description: string, url: string): MetaEntry[] {
@@ -25,8 +25,9 @@ function buildOg(title: string, description: string, url: string): MetaEntry[] {
 }
 
 export function headForHome(origin: string): HeadConfig {
-  const title = `${SITE_NAME} — Home`;
-  const description = "A minimal Hono + Vue SSR template on Cloudflare Workers.";
+  const title = `${SITE_NAME} — 事實查核 API 使用說明`;
+  const description =
+    "傳入待查核文字與選填網址，取得相關查核與證據綜整。閱讀 GET／POST 呼叫範例、輸入參數、回應格式與錯誤處理說明。";
   return {
     title,
     description,

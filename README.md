@@ -1,82 +1,51 @@
 # Fact Check API
 
-> 以 Cloudflare Workers 與 Hono 建立的事實查核 API MVP。
+以 Cloudflare Workers、Hono 與 Vue SSR 建立的事實查核 API MVP。送入一段待查核文字與選填網址，取得相關查核、證據綜整與結構化 JSON 結果。
 
-本專案接受一段待查核的事實主張，先經過內容安全分類，再從 Cofacts 找出可能相關的既有查核資料，使用語意模型篩選真正相關的證據，最後由 Gemma 綜整證據並輸出查核結果。
+首頁 `/` 提供繁體中文 API 使用指南，包含可複製的呼叫範例、參數、回應格式與錯誤處理。頁面中的 API 網址會使用目前站台位址，本機與部署後皆可參考。
 
-MVP 程式已實作於 `src/api`，保留既有 Vue SSR。一般測試以模擬上游驗證完整流程；真實 Cofacts／模型語意驗收與部署驗收需另行執行。詳見 [API 維護指南](./src/api/README.md)。
+## 快速開始
 
-## MVP pipeline
+需要 Node.js、npm、Vite+（`vp`）、Cloudflare 帳號與 OpenRouter API key。
 
-```text
-Client
-  │
-  ▼
-Hono /api/fact-check
-  │
-  ▼
-Input validation
-  │
-  ▼
-OpenRouter: gpt-oss-safeguard-20b
-  │
-  ├─ block → 回傳 blocked response
-  │
-  └─ allow / review
-       ├─ Cofacts moreLikeThis（候選 Top 15）
-       └─ optional URL safe fetch
-                │
-                ▼
-       Workers AI: @cf/openai/gpt-oss-20b
-       semantic relevance filter（保留 Top 3～5）
-                │
-                ▼
-       Cofacts detailed evidence
-       human replies / AI replies / references
-                │
-                ▼
-       Workers AI: @cf/google/gemma-4-26b-a4b-it
-       evidence synthesis
-                │
-                ▼
-       factuality / confidence / verdict / feedback
+```bash
+vp install
 ```
 
-模型職責刻意分離：
+自行建立本機 `.dev.vars`，設定唯一必要 secret：
 
-| 階段      | 服務                                       | 職責                                       |
-| --------- | ------------------------------------------ | ------------------------------------------ |
-| Safety    | OpenRouter `openai/gpt-oss-safeguard-20b`  | 判斷內容是否允許進入查核流程               |
-| Retrieval | Cofacts `moreLikeThis`                     | 以高 recall 找出可能相關文章               |
-| Reranking | Workers AI `@cf/openai/gpt-oss-20b`        | 判斷候選文章是否與主張實質相關；不判定真假 |
-| Evidence  | Cofacts GraphQL                            | 取得通過初篩文章的人工與 AI 查核資料       |
-| Synthesis | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 根據整理後的證據產生最終判斷               |
-
-## API
-
-提供 `/health` 與 `/api/fact-check`，GET／POST 共用同一個查核流程。
-
-### `GET /health`
-
-```json
-{
-  "status": "ok"
-}
+```dotenv
+OPENROUTER_API_KEY=your-openrouter-api-key
 ```
 
-### `GET /api/fact-check`
+請勿提交真實金鑰。`wrangler.jsonc` 已設定 Workers AI 的 `AI` binding；本機呼叫模型仍需要可連線的 Cloudflare 帳號與額度。Cofacts 使用公開 GraphQL，不需要 app ID／secret，也不必另外設定 Cloudflare AI API key。
 
-```http
-GET /api/fact-check?text=非學校型態學生，國中小以下目前沒有普遍補助
-GET /api/fact-check?text=...&url=https%3A%2F%2Fexample.com%2Farticle
+```bash
+vp run dev
 ```
 
-### `POST /api/fact-check`
+開啟啟動訊息中的網址，預設為 `http://localhost:5173`。首頁與 `/health` 可用，不代表外部模型及資料來源已通過連線驗收。
 
-```http
-POST /api/fact-check
-Content-Type: application/json
+## 呼叫 API
+
+| 方法 | 路徑              | 用途                               |
+| ---- | ----------------- | ---------------------------------- |
+| GET  | `/`               | API 使用說明首頁                   |
+| GET  | `/health`         | 回傳 `{"status":"ok"}`，不呼叫上游 |
+| GET  | `/api/fact-check` | 以 query string 傳入參數           |
+| POST | `/api/fact-check` | 以 JSON 傳入相同參數               |
+
+以下指令使用本機網址；部署後請替換為你的服務位址。
+
+### POST：以 JSON 查核
+
+```bash
+curl 'http://localhost:5173/api/fact-check' \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"非學校型態學生，國中小以下目前沒有普遍補助"}'
 ```
+
+可在 JSON 加入選填的 `url`：
 
 ```json
 {
@@ -85,190 +54,185 @@ Content-Type: application/json
 }
 ```
 
-`text` 必填，會先 trim 並檢查最多 10,000 字；`url` 選填，僅接受 `http` / `https`。GET 與 POST 最終共用同一個 `factCheck()` service。
+### GET：以參數查核
 
-輸入錯誤的格式：
-
-```json
-{
-  "status": "error",
-  "error": "INVALID_INPUT",
-  "message": "text 必填且不得超過 10,000 字；url 選填且須為公開 HTTP／HTTPS 網址。"
-}
+```bash
+curl --get 'http://localhost:5173/api/fact-check' \
+  --data-urlencode 'text=非學校型態學生，國中小以下目前沒有普遍補助'
 ```
 
-### 回應欄位（示例）
+附帶網址：
+
+```bash
+curl --get 'http://localhost:5173/api/fact-check' \
+  --data-urlencode 'text=非學校型態學生，國中小以下目前沒有普遍補助' \
+  --data-urlencode 'url=https://civic.vtaiwan.tw/issues/7'
+```
+
+`--data-urlencode` 會處理中文、空白及特殊字元。內容較長或敏感時建議使用 POST，避免文字出現在網址歷史或 access log。OpenRouter 金鑰只由服務維運者設定，不放進用戶端請求。
+
+### 輸入限制
+
+| 欄位   | 必填 | 說明                                                                            |
+| ------ | ---- | ------------------------------------------------------------------------------- |
+| `text` | 是   | 字串，trim 後不可為空，最多 10,000 個 Unicode code point                        |
+| `url`  | 否   | 公開 HTTP／HTTPS 網址，最多 2,048 個 UTF-16 code unit，不可帶帳號密碼或指向內網 |
+
+POST 的 `Content-Type` 必須為 `application/json`，本文上限為 128,000 bytes。沒有網址時省略 `url`，不接受空字串或 `null`。
+
+URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文字，不執行網頁 JavaScript；失敗時保留警告，Cofacts 流程照常。
+
+## 回應格式
+
+下列為「證據不足」的格式示例，並非對範例主張的實際查核結果。
 
 ```json
 {
   "text": "非學校型態學生，國中小以下目前沒有普遍補助",
-  "url": "https://civic.vtaiwan.tw/issues/7",
   "status": "completed",
   "moderation": {
     "decision": "allow",
     "categories": []
   },
-  "factuality": 0.9,
-  "confidence": 0.82,
-  "verdict": "mostly_supported",
+  "factuality": 0.5,
+  "confidence": 0.1,
+  "verdict": "insufficient_evidence",
   "related_checks": [],
-  "feedback": "根據目前整理到的證據，這項主張大致成立，但仍需注意適用範圍。",
+  "feedback": "目前沒有足夠相關證據，無法判定這項主張。",
   "meta": {
-    "cofacts_candidates": 15,
-    "cofacts_relevant": 3,
-    "cofacts_human_checks": 2,
-    "cofacts_ai_checks": 1
+    "request_id": "example-request-id",
+    "cofacts_candidates": 0,
+    "cofacts_relevant": 0,
+    "cofacts_human_checks": 0,
+    "cofacts_ai_checks": 0,
+    "url_context_used": false,
+    "warnings": []
   }
 }
 ```
 
-`verdict` 的固定值為：
+若輸入有 `url`，回應也會保留該欄位。查核回應附有 `X-Request-Id` 與 `Cache-Control: no-store`。
 
-```text
-supported
-mostly_supported
-mixed
-mostly_refuted
-refuted
-insufficient_evidence
-```
+| 欄位             | 意義                                                                      |
+| ---------------- | ------------------------------------------------------------------------- |
+| `factuality`     | 0～1，證據支持主張的程度，不是主張為真的機率；無證據時的 0.5 表示無法判定 |
+| `confidence`     | 0～1，判斷所依據的證據是否充分、可靠且一致                                |
+| `verdict`        | 下表列出的固定判斷分類                                                    |
+| `feedback`       | 繁體中文說明，包含適用範圍、證據限制與查證方向                            |
+| `related_checks` | 相關人工／AI 查核及其來源連結                                             |
+| `meta`           | request ID、候選／證據數量、URL 背景使用狀態與警告                        |
 
-`factuality` 表示主張獲證據支持的程度（`0`～`1`）；`confidence` 表示證據是否充分、可靠且一致。兩者不可混為一談，例如高 factuality 仍可能搭配低 confidence。
+| verdict                 | 意義                 |
+| ----------------------- | -------------------- |
+| `supported`             | 證據支持             |
+| `mostly_supported`      | 證據大致支持         |
+| `mixed`                 | 支持與反駁的證據並存 |
+| `mostly_refuted`        | 證據大致反駁         |
+| `refuted`               | 證據反駁             |
+| `insufficient_evidence` | 證據不足，無法判定   |
 
-## 證據與模型分工原則
+`related_checks` 每筆以 `type` 區分 `cofacts_human`／`cofacts_ai`，保留 `text` 與 Cofacts article `url`，有引用來源時附 `reference_url`／`reference_urls`；其他 metadata 包含 `classification`、`retrieval_score` 與 `relevance_score`。
 
-- Cofacts 的 Elasticsearch `_score` 只是搜尋排序 metadata，不是百分比、機率、相關度或 factuality。
-- `retrievalScore`（Cofacts `_score`）與 `relevanceScore`（語意初篩結果）必須分開保存。
-- `gpt-oss-20b` 只做 relevance filter，不負責判斷真假。
-- 先以 Cofacts Retrieval 取約 15 筆候選，再批次篩選，最多只對 3～5 筆取得詳細 evidence。
-- 人工查核回覆與 Cofacts AI 回覆必須分開；人工查核及其引用來源優先於 AI 回覆。
-- 沒有相關 Cofacts 資料不是錯誤；沒有 URL 時，最終結果應傾向 `insufficient_evidence`，不能靠模型記憶補足證據。
-- 使用者提供的 URL 只是 context，不自動代表可信來源。
+Cofacts 的 `retrieval_score` 只是搜尋排序，不是百分比、機率或相關度；`relevance_score` 才是語意相關程度。兩者都不是真假判斷，不可直接換算 factuality。
 
-## 安全與錯誤處理
+## 狀態與錯誤
 
-Safety Gate 至少涵蓋仇恨／去人化、騷擾、人身攻擊、露骨性內容、暴力威脅與隱私曝露；引用、新聞、公共政策討論、學術研究及批判性分析仍應保留 fact-check exception。
+HTTP 200 時仍需檢查 `status`：
 
-提供 URL 時，fetcher 必須：
+| status      | 行為                                                                               |
+| ----------- | ---------------------------------------------------------------------------------- |
+| `completed` | 流程完成，可能得到證據不足的判斷                                                   |
+| `partial`   | 部分上游失敗，以仍可取得的證據完成綜整；原因見 `meta.warnings`                     |
+| `blocked`   | 安全層停止查核；factuality、confidence、verdict 為 `null`，related_checks 為空陣列 |
 
-- 只接受 `http` / `https`。
-- 阻擋 localhost、loopback、private network 與 link-local 位址。
-- 每次 redirect 後重新進行 SSRF 檢查。
-- 設定 timeout、response size limit 與 content-type validation。
+安全分類 `allow`／`review` 都繼續處理，`review` 保留旗標。引用待查言論、新聞、公共政策、學術研究與批判性分析等情境會納入查核例外考量。
 
-上游服務失敗時：
+錯誤回應示例：
 
-| 階段             | 行為                                         |
-| ---------------- | -------------------------------------------- |
-| Safeguard        | 回傳 `502`，不可跳過安全層                   |
-| Cofacts search   | 若有 URL 可繼續，但標記 upstream unavailable |
-| Relevance filter | 不把未篩選候選直接送給 Gemma                 |
-| Cofacts detail   | 單筆失敗可跳過，保留其他 evidence            |
-| URL fetch        | Cofacts 流程照常進行                         |
-| Gemma synthesis  | 回傳 `502`，不可自行拼接 factuality          |
-
-## 設定
-
-### 必要條件
-
-- Node.js 與 npm
-- Cloudflare 帳號（部署及 Workers AI binding）
-- OpenRouter API key
-
-MVP 唯一需要設定的 secret 是 `OPENROUTER_API_KEY`。Cofacts 使用公開 GraphQL API，不需要 app ID 或 app secret；Workers AI 透過 Worker 的 `env.AI` binding 使用，不需要另外設定 Cloudflare AI API key。
-
-本機開發時，在 `.dev.vars` 放入：
-
-```dotenv
-OPENROUTER_API_KEY=your-openrouter-api-key
-```
-
-部署至 Cloudflare 時：
-
-```bash
-npx wrangler secret put OPENROUTER_API_KEY
-```
-
-請勿將真實 credential 寫入 README、提交至 Git，或放進 production log。`.dev.vars` 已列入 `.gitignore`。
-
-`wrangler.jsonc` 需要包含 Workers AI binding：
-
-```jsonc
+```json
 {
-  "name": "fact-check",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-04-17",
-  "ai": { "binding": "AI" },
+  "status": "error",
+  "error": "INVALID_INPUT",
+  "message": "text 必填且不得超過 10,000 字；url 選填且須為公開 HTTP／HTTPS 網址。",
+  "request_id": "example-request-id"
 }
 ```
 
-Workers AI binding 已設定；為配合目前安裝的 workerd，保留既有 compatibility date。實際部署設定以 repository 內的 `wrangler.jsonc` 為準。建置不讀取或複製本機 secret。
+| HTTP | error                  | 處理方式                                                      |
+| ---- | ---------------------- | ------------------------------------------------------------- |
+| 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤 |
+| 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                              |
+| 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                |
+| 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                      |
 
-## 開發
+Safeguard 或 Gemma 失敗回 502，不跳過安全層、不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
+
+## 查核流程
+
+| 階段     | 服務                                       | 職責                                                     |
+| -------- | ------------------------------------------ | -------------------------------------------------------- |
+| 安全分類 | OpenRouter `openai/gpt-oss-safeguard-20b`  | 決定是否進入查核流程                                     |
+| 候選搜尋 | Cofacts `moreLikeThis`                     | 召回最多 15 篇文章；此時平行抓取選填 URL                 |
+| 語意初篩 | Workers AI `@cf/openai/gpt-oss-20b`        | 批次判斷相關性，最多保留 5 篇，不判真假                  |
+| 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
+| 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
+
+初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；沒有證據時應回 `insufficient_evidence`，不使用模型記憶替代證據。
+
+## 開發與驗證
 
 ```bash
-vp install        # 安裝依賴
-vp run dev        # 啟動本機 Vite / Worker 開發環境
 vp run check      # 格式與 lint 檢查
-vp run typecheck  # TypeScript 型別檢查
 vp run build      # 建置
 vp test           # 執行測試
-vp run deploy     # 建置並部署至 Cloudflare Workers
+vp run typecheck  # TypeScript 型別檢查
 ```
 
-本機 health check：
+一般測試模擬外部傳輸，原生 HTML 解析以本機 workerd 執行。`tests/fixtures/relevance-cases.json` 保存藍圖的四個 Cofacts ID 與標註；一般回歸測試驗證處理邏輯，不代表真實模型已通過語意驗收。
+
+需要網路與已登入的 Cloudflare 帳號，才啟用真實語意回歸：
 
 ```bash
-curl http://localhost:5173/health
+FACT_CHECK_LIVE=1 vp test tests/relevance.live.test.ts
 ```
 
-## 目錄結構
+此測試會使用 Workers AI 額度。完整正式服務連線與部署驗收需另行執行。
+
+確認部署時，在 Cloudflare 設定相同名稱的 secret，再執行部署：
+
+```bash
+npx wrangler secret put OPENROUTER_API_KEY
+vp run deploy
+```
+
+`wrangler.jsonc` 保留目前 workerd 相容的 compatibility date；建置不讀取或複製本機 secret。URL DNS rebinding、抓取編碼及模型 timeout 等邊界請見 [API 維護指南](./src/api/README.md)。
+
+## 目錄與文件
 
 ```text
 src/
-├── index.ts                 # Hono 主程式與 SSR
+├── index.ts                 # 掛載 API、首頁與既有 SSR 路由
 ├── api/
-│   ├── index.ts             # API middleware 與錯誤處理
-│   ├── config.ts            # 模型、門檻、大小與時間限制
+│   ├── index.ts             # middleware 與錯誤回應
+│   ├── config.ts            # 模型、門檻與資源限制
 │   ├── routes/
-│   ├── services/            # 各階段與 orchestrator
+│   ├── services/            # 各查核階段與 orchestrator
 │   ├── prompts/
 │   ├── schemas/
 │   ├── types/
 │   ├── utils/
-│   └── README.md            # 維護契約與驗收方式
-├── views/
-├── components/
-└── ssr/
+│   └── README.md            # API 維護指南
+├── views/Home.vue           # API 使用說明首頁
+├── components/NavBar.vue    # 共用導覽
+└── ssr/                     # Vue SSR 與頁面 metadata
+public/                      # 共用樣式與 favicon
+tests/                       # API、SSR、原生 HTML 與語意回歸測試
 ```
-
-## 測試與驗收
-
-第一個 regression fixture 已放在 `tests/fixtures/relevance-cases.json`，至少確認以下案例的語意篩選結果：
-
-- 與「國中小非學校型態教育補助」直接相關的 Cofacts 文章 → `relevant`
-- 只談國中小性教育、停班停課、同志教育或公投的文章 → `irrelevant`
-
-MVP 驗收條件包括：Safeguard、Cofacts retrieval、批次 relevance filter、詳細 evidence、human/AI evidence 分流、Gemma synthesis、安全 URL fetch、明確的 upstream fallback，以及 end-to-end 測試。
-
-## 相關文件
 
 - [MVP 工程施工藍圖](./design/fact_check_MVP_plan.md)
-- [MIT License](./LICENSE)
+- [API 維護指南](./src/api/README.md)
+- [議題 #6：建立首頁](https://github.com/g0v/fact-check-api/issues/6)
 
-## License
+## 授權
 
-MIT。
-
-## 呼叫與部分失敗
-
-Vite 預設網址如下；若連接埠被占用，以啟動訊息為準。
-
-```bash
-curl --get 'http://localhost:5173/api/fact-check' --data-urlencode 'text=非學校型態學生，國中小以下目前沒有普遍補助'
-curl 'http://localhost:5173/api/fact-check' -H 'Content-Type: application/json' --data '{"text":"非學校型態學生，國中小以下目前沒有普遍補助"}'
-```
-
-回應可能為 `completed`、`partial` 或 `blocked`。`partial` 的原因在 `meta.warnings`；`blocked` 回 HTTP 200，factuality、confidence、verdict 為 null。Safeguard／Gemma 失敗回 502；搜尋／初篩失敗時，只有 URL 文字已成功取得才繼續。所有回應禁止快取並附 request ID。
-
-模型、URL 安全邊界、真實語意回歸指令與已知限制請見 [API 維護指南](./src/api/README.md)。
+程式碼採 [MIT License](./LICENSE)。

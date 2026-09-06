@@ -24,7 +24,7 @@ app.get("/api/hello", (c) => c.text("Hello World!"));
 // SSR 路由：每條路由把 props 與 head 交給 renderPage 產出完整 HTML
 app.get("/", async (c) => {
   const origin = new URL(c.req.url).origin;
-  const html = await renderPage(HomeView, {}, headForHome(origin));
+  const html = await renderPage(HomeView, { origin }, headForHome(origin));
   return c.html(html);
 });
 
