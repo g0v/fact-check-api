@@ -34,7 +34,7 @@ describe("相關性分數與請求隔離", () => {
           reason: item.reason,
         })),
       );
-      expect(result.selected.map((item) => item.articleId)).toEqual(["14", "13", "11", "10", "8"]);
+      expect(result.selected.map((item) => item.articleId)).toEqual(["14", "13", "11", "10"]);
       for (const item of result.selected) {
         expect(item.text).toBe(`測試文章 ${item.articleId}`);
         expect(item.relevanceScore).toBe(Number(item.articleId) / 15);
@@ -93,12 +93,12 @@ describe("相關性分數與請求隔離", () => {
     });
     pending.get("主張乙")!(output(0.9, "理由乙"));
     const secondResult = await second;
-    pending.get("主張甲")!(output(0.6, "理由甲"));
+    pending.get("主張甲")!(output(0.7, "理由甲"));
     const firstResult = await first;
     expect(firstResult.selected[0]).toMatchObject({
       text: "文章甲",
       searchScore: 10,
-      relevanceScore: 0.6,
+      relevanceScore: 0.7,
       relevanceReason: "理由甲",
     });
     expect(secondResult.selected[0]).toMatchObject({
@@ -107,7 +107,7 @@ describe("相關性分數與請求隔離", () => {
       relevanceScore: 0.9,
       relevanceReason: "理由乙",
     });
-    expect(firstResult.results[0].relevance).toBe(0.6);
+    expect(firstResult.results[0].relevance).toBe(0.7);
     expect(secondResult.results[0].relevance).toBe(0.9);
   });
 

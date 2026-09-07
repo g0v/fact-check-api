@@ -55,13 +55,14 @@ describe("初篩契約與工程藍圖回歸案例", () => {
   });
 
   it.each([
-    { score: 0.49, relevant: true, expectedCount: 0 },
-    { score: 0.5, relevant: true, expectedCount: 1 },
-    { score: 0.51, relevant: true, expectedCount: 1 },
-    { score: 0.5, relevant: false, expectedCount: 0 },
+    // 檢驗 0.65 為門檻（含邊界）：低於門檻不保留，等於或高於門檻且判定為相關才保留
+    { score: 0.64, relevant: true, expectedCount: 0 },
+    { score: 0.65, relevant: true, expectedCount: 1 },
+    { score: 0.66, relevant: true, expectedCount: 1 },
+    // 即使分數很高，但標記為不相關時不保留
     { score: 1, relevant: false, expectedCount: 0 },
   ])(
-    "0.5 門檻含邊界且必須判定相關：分數 $score、相關 $relevant，保留 $expectedCount 篇",
+    "0.65 門檻含邊界且必須判定相關：分數 $score、相關 $relevant，保留 $expectedCount 篇",
     async ({ score, relevant, expectedCount }) => {
       // 單篇候選隔離門檻行為，避免被前五篇的排序上限掩蓋。
       const h = harness({
