@@ -164,7 +164,9 @@ export async function factCheck(
     no_relevant_evidence: meta.no_relevant_evidence,
   });
   const result = await stage("synthesis", () =>
-    synthesize(input, moderation, evidence, env, usage),
+    synthesize(input, moderation, evidence, env, usage, (event) =>
+      log({ ...event, request_id: requestId }),
+    ),
   );
   const relatedChecks: RelatedCheck[] = details.evidence.map((item) => ({
     type: item.source === "cofacts-human" ? "cofacts_human" : "cofacts_ai",

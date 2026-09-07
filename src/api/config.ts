@@ -7,7 +7,7 @@ export const MODELS = {
 export const RESULT_CACHE = {
   namespace: "fact-check-results",
   // 查核邏輯或回應契約改動時遞增；模型、提示與 LIMITS 另外自動納入快取鍵。
-  version: "v3",
+  version: "v4",
   ttlSeconds: 3600,
   timeoutMs: 1000,
 } as const;

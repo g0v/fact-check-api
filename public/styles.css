@@ -641,6 +641,83 @@ p.form-error {
 .result-items > li {
   padding: 0.3rem 0;
 }
+.result-summary {
+  margin-top: 1.2rem;
+}
+.result-summary h4,
+.result-rest h4 {
+  margin: 1.6rem 0 0.4rem;
+  font-size: 1rem;
+}
+.verdict-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.3rem;
+}
+.verdict-text {
+  font-size: 1.55rem;
+  line-height: 1.4;
+  color: var(--accent);
+}
+.assessment-line {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.assessment-numbers {
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.summary-feedback {
+  margin: 0;
+}
+.source-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.5rem;
+}
+.source-item {
+  padding: 0.5rem 0;
+}
+.source-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.2rem;
+}
+.source-type {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: var(--accent);
+  background: var(--soft);
+  padding: 0.1rem 0.6rem;
+  border-radius: 4px;
+}
+.source-text {
+  margin: 0.2rem 0;
+}
+.source-references {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+}
+.source-references a {
+  overflow-wrap: anywhere;
+}
+.source-details {
+  margin-top: 0.8rem;
+}
+.result-rest {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
 .raw-result {
   margin-top: 1rem;
 }

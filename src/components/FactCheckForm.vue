@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
-import FactCheckValue from "./FactCheckValue.vue";
+import FactCheckResult from "./FactCheckResult.vue";
 import { useFactCheckForm } from "../client/use-fact-check-form";
 
 const {
@@ -99,10 +99,7 @@ async function submit() {
       </p>
       <p v-if="result && !result.ok" class="form-error">請求未成功完成，以下為伺服器回應。</p>
       <template v-if="result">
-        <p class="form-help">
-          以下依 API 實際回傳的欄位逐項顯示。數值不換算成百分比；未回傳的選填欄位不補值。
-        </p>
-        <FactCheckValue :value="result.data" path="" />
+        <FactCheckResult :data="result.data" />
         <details class="code-details raw-result">
           <summary>查看完整原始回應</summary>
           <pre tabindex="0" aria-label="完整原始 API 回應"><code>{{ result.raw }}</code></pre>
