@@ -37,7 +37,8 @@ export function headForHome(origin: string): HeadConfig {
 
 export function headForAbout(origin: string): HeadConfig {
   const title = `About — ${SITE_NAME}`;
-  const description = "About this template: Hono + Vue + Vue SSR on Cloudflare Workers.";
+  const description =
+    "Fact Check API 目前為 Demo，每日 Workers AI 配額預設為 10,000 neurons（僅供大約 30 次查核），並由 Durable Object 記帳；正式使用請 fork 專案後自行部署。";
   return {
     title,
     description,
