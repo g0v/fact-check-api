@@ -28,13 +28,13 @@ describe("初篩契約與工程藍圖回歸案例", () => {
     expect(h.run).toHaveBeenCalledTimes(1);
   });
 
-  it("0.65 含邊界、最多五篇、保留本地全文並限制模型文字", async () => {
+  it("最多保留相關性最高的五篇、保留本地全文並限制模型文字", async () => {
     const candidates = Array.from({ length: 8 }, (_, i) => ({
       articleId: String(i),
       text: "字".repeat(5_000),
       searchScore: i,
     }));
-    const scores = [0.64, 0.65, 0.7, 0.9, 0.8, 0.66, 0.99, 1];
+    const scores = [0.49, 0.5, 0.7, 0.9, 0.8, 0.66, 0.99, 1];
     const h = harness({
       relevance: {
         results: candidates.map((item, i) => ({
@@ -47,20 +47,36 @@ describe("初篩契約與工程藍圖回歸案例", () => {
     });
     const result = await filterRelevantCandidates("測試主張", candidates, h.env);
     expect(result.selected.map((item) => item.articleId)).toEqual(["6", "3", "4", "2", "5"]);
-    expect(result.results.find((item) => item.articleId === "1")?.relevance).toBe(0.65);
+    expect(result.results.find((item) => item.articleId === "1")?.relevance).toBe(0.5);
     expect(result.selected[0].text.length).toBe(5_000);
     expect(JSON.parse(h.run.mock.calls[0][1].messages[1].content).candidates[0].text.length).toBe(
       LIMITS.candidateText,
     );
-    const boundary = harness({
-      relevance: {
-        results: [{ article_id: "1", relevant: true, relevance: 0.65, reason: "測試門檻。" }],
-      },
-    });
-    expect(
-      (await filterRelevantCandidates("測試主張", [candidates[1]], boundary.env)).selected,
-    ).toHaveLength(1);
   });
+
+  it.each([
+    { score: 0.49, relevant: true, expectedCount: 0 },
+    { score: 0.5, relevant: true, expectedCount: 1 },
+    { score: 0.51, relevant: true, expectedCount: 1 },
+    { score: 0.5, relevant: false, expectedCount: 0 },
+    { score: 1, relevant: false, expectedCount: 0 },
+  ])(
+    "0.5 門檻含邊界且必須判定相關：分數 $score、相關 $relevant，保留 $expectedCount 篇",
+    async ({ score, relevant, expectedCount }) => {
+      // 單篇候選隔離門檻行為，避免被前五篇的排序上限掩蓋。
+      const h = harness({
+        relevance: {
+          results: [{ article_id: "boundary", relevant, relevance: score, reason: "測試門檻。" }],
+        },
+      });
+      const result = await filterRelevantCandidates(
+        "測試主張",
+        [{ articleId: "boundary", text: "測試文章", searchScore: null }],
+        h.env,
+      );
+      expect(result.selected).toHaveLength(expectedCount);
+    },
+  );
 
   it.each([
     [],
