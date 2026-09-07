@@ -231,7 +231,7 @@ Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼�
 | 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
 | 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
 
-初篩門檻為 `relevant: true` 且 `relevance >= 0.5`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷，程式以 `meta.no_relevant_evidence` 標記並把 `confidence` 下修至最高 0.5，常識也無法判斷時才回 `insufficient_evidence`。
+初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷，程式以 `meta.no_relevant_evidence` 標記並把 `confidence` 下修至最高 0.65，常識也無法判斷時才回 `insufficient_evidence`。
 
 ## 開發與驗證
 

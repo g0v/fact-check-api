@@ -675,11 +675,11 @@ relevance
 第一版先使用：
 
 ```ts
-RELEVANCE_THRESHOLD = 0.5;
+RELEVANCE_THRESHOLD = 0.65;
 ```
 
-- [ ] `>= 0.5` → 保留
-- [ ] `< 0.5` → 排除
+- [ ] `>= 0.65` → 保留
+- [ ] `< 0.65` → 排除
 - [ ] 依 relevance 排序
 - [ ] 最多保留 5 筆
 
@@ -687,16 +687,16 @@ RELEVANCE_THRESHOLD = 0.5;
 
 ```ts
 const relevant = results
-  .filter((x) => x.relevant && x.relevance >= 0.5)
+  .filter((x) => x.relevant && x.relevance >= 0.65)
   .sort((a, b) => b.relevance - a.relevance)
   .slice(0, 5);
 ```
 
 注意：
 
-- [ ] `0.5` 是 MVP 初始值
+- [ ] `0.65` 是 MVP 初始值
 - [ ] 之後必須用測試 dataset 校準
-- [ ] 不宣稱 0.5 是客觀標準
+- [ ] 不宣稱 0.65 是客觀標準
 
 ---
 
