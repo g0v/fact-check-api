@@ -1,6 +1,7 @@
 export type FactCheckInput = { text: string; url?: string };
 export type ModerationResult = {
-  decision: "allow" | "review" | "block";
+  // skipped 只由程式在安全分類服務失敗時建構，不接受模型或快取回傳此值。
+  decision: "allow" | "review" | "block" | "skipped";
   categories: string[];
   reason?: string;
 };

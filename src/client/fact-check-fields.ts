@@ -14,7 +14,8 @@ const fields: Record<string, FieldInfo> = {
   },
   "moderation.decision": {
     label: "安全決策",
-    description: "allow：繼續查核；review：繼續但保留敏感旗標；block：停止查核。",
+    description:
+      "allow：繼續查核；review：繼續但保留敏感旗標；block：停止查核；skipped：安全分類服務暫時無法使用，本次未執行安全檢查。",
   },
   "moderation.categories": {
     label: "安全分類代碼",
@@ -147,7 +148,12 @@ const labels: Record<string, Record<string, string>> = {
     refuted: "證據反駁",
     insufficient_evidence: "證據不足，無法判定",
   },
-  "moderation.decision": { allow: "允許查核", review: "保留旗標並繼續", block: "停止查核" },
+  "moderation.decision": {
+    allow: "允許查核",
+    review: "保留旗標並繼續",
+    block: "停止查核",
+    skipped: "未執行安全檢查",
+  },
   "related_checks[].type": { cofacts_human: "社群人工查核", cofacts_ai: "AI 回覆" },
 };
 const stages: Record<string, string> = {

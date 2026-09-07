@@ -5,11 +5,12 @@ import type {
   Evidence,
   FactCheckInput,
   FactCheckResponse,
+  ModerationResult,
   RelatedCheck,
   UpstreamStage,
   Warning,
 } from "../types/fact-check";
-import { upstreamError } from "../utils/errors";
+import { ApiError, upstreamError } from "../utils/errors";
 import type { Fetcher } from "../utils/http";
 import { createStageRunner, type Logger } from "../utils/logging";
 import { getCofactsEvidence } from "./cofacts-evidence";
@@ -53,9 +54,21 @@ export async function factCheck(
     has_url: Boolean(input.url),
     openrouter_api_key_present: env.OPENROUTER_API_KEY != null,
   });
-  const moderation = await stage("moderation", () =>
-    moderate(input.text, env, fetcher, (event) => log({ ...event, request_id: requestId })),
-  );
+  let moderation: ModerationResult;
+  try {
+    moderation = await stage("moderation", () =>
+      moderate(input.text, env, fetcher, (event) => log({ ...event, request_id: requestId })),
+    );
+  } catch (error) {
+    // Issue #12：OpenRouter 不穩定時跳過安全分類、標記警告並繼續查核；設定錯誤仍回 502。
+    if (error instanceof ApiError && error.configError) throw error;
+    warn("moderation");
+    moderation = {
+      decision: "skipped",
+      categories: [],
+      reason: "安全分類服務暫時無法使用，本次未執行安全檢查。",
+    };
+  }
   log({ event: "moderation", request_id: requestId, decision: moderation.decision });
   if (moderation.decision === "block") {
     return {

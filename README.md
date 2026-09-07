@@ -185,7 +185,7 @@ HTTP 200 時仍需檢查 `status`：
 | `partial`   | 部分上游失敗，以仍可取得的證據完成綜整；原因見 `meta.warnings`                     |
 | `blocked`   | 安全層停止查核；factuality、confidence、verdict 為 `null`，related_checks 為空陣列 |
 
-安全分類 `allow`／`review` 都繼續處理，`review` 保留旗標。引用待查言論、新聞、公共政策、學術研究與批判性分析等情境會納入查核例外考量。
+安全分類 `allow`／`review` 都繼續處理，`review` 保留旗標。引用待查言論、新聞、公共政策、學術研究與批判性分析等情境會納入查核例外考量。OpenRouter 安全分類服務暫時無法使用時，`moderation.decision` 標記為 `skipped` 並跳過安全檢查繼續查核；此時狀態為 `partial`，`meta.warnings` 帶有 `moderation` 警告。
 
 錯誤回應示例：
 
@@ -206,7 +206,7 @@ HTTP 200 時仍需檢查 `status`：
 | 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                |
 | 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                      |
 
-Safeguard 或 Gemma 失敗回 502，不跳過安全層、不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
+Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
 
 ## 查核流程
 

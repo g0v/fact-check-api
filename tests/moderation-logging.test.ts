@@ -116,9 +116,9 @@ describe("Safeguard 診斷紀錄", () => {
           },
         }),
       );
-      await expect(factCheck({ text: claim }, h.env, { ...h, requestId })).rejects.toMatchObject({
-        status: 502,
-      });
+      const result = await factCheck({ text: claim }, h.env, { ...h, requestId });
+      expect(result.status).toBe("partial");
+      expect(result.moderation.decision).toBe("skipped");
       expect(h.log).toHaveBeenCalledWith(
         expect.objectContaining({
           event: "moderation_error",
@@ -127,8 +127,10 @@ describe("Safeguard 診斷紀錄", () => {
         }),
       );
       expect(cancel).toHaveBeenCalledOnce();
-      expect(h.fetcher).toHaveBeenCalledOnce();
-      expect(h.run).not.toHaveBeenCalled();
+      expect(
+        h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
+      ).toHaveLength(1);
+      expect(h.run).toHaveBeenCalledTimes(2);
       expect(JSON.stringify(h.log.mock.calls)).not.toContain("your-cookie-placeholder");
       expectSafeLogs(h);
     },
@@ -218,9 +220,9 @@ describe("Safeguard 診斷紀錄", () => {
   ])("可區分 $name 並避免將私人內容寫入 log", async ({ output, reason, metadata }) => {
     const h = harness();
     h.fetcher.mockResolvedValueOnce(Response.json(output));
-    await expect(factCheck({ text: claim }, h.env, { ...h, requestId })).rejects.toMatchObject({
-      status: 502,
-    });
+    const result = await factCheck({ text: claim }, h.env, { ...h, requestId });
+    expect(result.status).toBe("partial");
+    expect(result.moderation.decision).toBe("skipped");
     expect(h.log).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "moderation_error",
@@ -229,8 +231,10 @@ describe("Safeguard 診斷紀錄", () => {
         ...metadata,
       }),
     );
-    expect(h.fetcher).toHaveBeenCalledOnce();
-    expect(h.run).not.toHaveBeenCalled();
+    expect(
+      h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
+    ).toHaveLength(1);
+    expect(h.run).toHaveBeenCalledTimes(2);
     expectSafeLogs(h);
   });
 
@@ -267,9 +271,9 @@ describe("Safeguard 診斷紀錄", () => {
   ])("傳輸失敗回報 $reason", async ({ reason, upstreamStatus, response }) => {
     const h = harness();
     h.fetcher.mockImplementationOnce(async () => response());
-    await expect(factCheck({ text: claim }, h.env, { ...h, requestId })).rejects.toMatchObject({
-      status: 502,
-    });
+    const result = await factCheck({ text: claim }, h.env, { ...h, requestId });
+    expect(result.status).toBe("partial");
+    expect(result.moderation.decision).toBe("skipped");
     expect(h.log).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "moderation_error",
@@ -277,7 +281,7 @@ describe("Safeguard 診斷紀錄", () => {
         upstream_status: upstreamStatus,
       }),
     );
-    expect(h.run).not.toHaveBeenCalled();
+    expect(h.run).toHaveBeenCalledTimes(2);
     expectSafeLogs(h);
   });
 
@@ -290,11 +294,11 @@ describe("Safeguard 診斷紀錄", () => {
         ? new Response(new ReadableStream({ cancel }))
         : new Promise<Response>(() => undefined),
     );
-    const assertion = expect(
-      factCheck({ text: claim }, h.env, { ...h, requestId }),
-    ).rejects.toMatchObject({ status: 502 });
+    const promise = factCheck({ text: claim }, h.env, { ...h, requestId });
     await vi.advanceTimersByTimeAsync(LIMITS.modelTimeoutMs + 1);
-    await assertion;
+    const result = await promise;
+    expect(result.status).toBe("partial");
+    expect(result.moderation.decision).toBe("skipped");
     expect(h.log).toHaveBeenCalledWith(
       expect.objectContaining({
         event: "moderation_error",
@@ -305,7 +309,7 @@ describe("Safeguard 診斷紀錄", () => {
     );
     expect(h.fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
     if (hasHeaders) expect(cancel).toHaveBeenCalled();
-    expect(h.run).not.toHaveBeenCalled();
+    expect(h.run).toHaveBeenCalledTimes(2);
     expectSafeLogs(h);
   });
 });

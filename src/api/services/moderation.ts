@@ -183,6 +183,10 @@ export async function moderate(
       message: error instanceof HttpError ? error.message : moderationErrorMessages[reason],
       latency_ms: Date.now() - start,
     });
-    throw upstreamError("moderation");
+    // 缺少金鑰是設定錯誤，不是上游不穩定；標記後由呼叫端維持 502，不跳過安全層。
+    throw upstreamError(
+      "moderation",
+      !(error instanceof HttpError) && reason === "missing_api_key",
+    );
   }
 }
