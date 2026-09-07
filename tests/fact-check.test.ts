@@ -168,22 +168,47 @@ describe("完整查核流程（模擬外部傳輸）", () => {
   });
 
   it.each(["cofacts-search", "relevance"] as const)(
-    "%s 失敗且有 URL 時回 partial，只綜整 URL",
+    "%s 失敗且有 URL 時一律回 502，URL 不作為 fallback",
     async (stage) => {
       const h = harness({
         searchFailure: stage === "cofacts-search",
         relevanceFailure: stage === "relevance",
       });
-      const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
-      expect(result.status).toBe("partial");
-      expect(result.meta.warnings).toEqual([{ stage, code: "UPSTREAM_UNAVAILABLE" }]);
-      expect(result.meta.no_relevant_evidence).toBe(false);
-      expect(result.related_checks).toEqual([]);
-      expect(JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content).evidence).toEqual([
-        expect.objectContaining({ source: "provided-url", reliability: "user-provided" }),
-      ]);
+      await expect(
+        factCheck({ text: claim, url: "https://example.com" }, h.env, h),
+      ).rejects.toMatchObject({ status: 502, stage });
+      expect(h.run.mock.calls.some(([model]) => model === MODELS.synthesis)).toBe(false);
     },
   );
+
+  it("只有使用者網址而無 Cofacts 證據時，URL 不進模型也不進 related_checks", async () => {
+    const h = harness({ edges: [] });
+    const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
+    expect(result.status).toBe("completed");
+    expect(result.meta.no_relevant_evidence).toBe(true);
+    expect(result.meta.url_context_used).toBe(true);
+    expect(result.meta.cofacts_human_checks).toBe(0);
+    expect(result.meta.cofacts_ai_checks).toBe(0);
+    expect(result.related_checks).toEqual([]);
+    // url-only 走常識判斷契約：模型收空證據，信心值被下修至 0.5。
+    const payload = JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content);
+    expect(payload.evidence).toEqual([]);
+    expect(h.run.mock.calls.at(-1)![1].messages[0].content).toContain("常識");
+    expect(result.confidence).toBeLessThanOrEqual(0.5);
+  });
+
+  it("cofacts 與 URL 混合時 provided-url 仍正常進入 evidence", async () => {
+    const h = harness();
+    const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
+    expect(result.status).toBe("completed");
+    expect(result.meta.url_context_used).toBe(true);
+    const payload = JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content);
+    expect(payload.evidence.map((item: { source: string }) => item.source)).toEqual([
+      "cofacts-human",
+      "cofacts-ai",
+      "provided-url",
+    ]);
+  });
 
   it("URL 與搜尋皆失敗時不假裝有可用 URL", async () => {
     const h = harness({ searchFailure: true, urlFailure: true });

@@ -22,13 +22,13 @@
 - 正常回 HTTP 200、`status: completed`；有可恢復的上游失敗則回 HTTP 200、`status: partial`，原因在 `meta.warnings`。
 - 每次回應有 `X-Request-Id` 與 `Cache-Control: no-store`。API 錯誤含繁體中文 message、固定英文 error code 與 request ID。
 
-| 失敗階段                  | 行為                                                          |
-| ------------------------- | ------------------------------------------------------------- |
-| Safeguard                 | 跳過安全分類並標記 `skipped` 與警告；設定錯誤仍回 HTTP 502    |
-| Cofacts search／relevance | 已成功抓到 URL 文字才以 URL 繼續並標記 partial，否則 HTTP 502 |
-| Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                   |
-| URL                       | 保留警告，Cofacts 照常；搜尋成功但沒有證據時交 Gemma 常識判斷 |
-| Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                  |
+| 失敗階段                  | 行為                                                         |
+| ------------------------- | ------------------------------------------------------------ |
+| Safeguard                 | 跳過安全分類並標記 `skipped` 與警告；設定錯誤仍回 HTTP 502   |
+| Cofacts search／relevance | 一律 HTTP 502，不因已抓到 URL 文字而繼續                     |
+| Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                  |
+| URL                       | 保留警告，Cofacts 照常；查無 Cofacts 證據時交 Gemma 常識判斷 |
+| Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                 |
 
 ## Safeguard 呼叫契約
 
@@ -120,15 +120,15 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 每筆 evidence 文字最多 6,000 個 UTF-16 code unit。綜整時另分配全體 evidence 共 60,000 的本文文字預算，以及各半的原始文章與引文文字預算，避免過量回覆超出 context。`related_checks` 由程式根據實際 Cofacts 證據建立，不由模型編造；每筆保留 Cofacts article URL。
 
-Gemma 為唯一真假判斷階段。當 evidence 空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式以 `meta.no_relevant_evidence` 標記此狀態，並在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
+Gemma 為唯一真假判斷階段。當送入模型的 evidence 為空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
 
-綜整呼叫依 Gemma 4 的 Workers AI 官方設定帶 `chat_template_kwargs: { enable_thinking: false }`，避免模型把輸出額度耗在 reasoning 後留下空的 `message.content`；另帶 `frequency_penalty: 0.5`，抑制 temperature 0 下偶發的重複迴圈（曾實測燒滿 4,096 輸出 token 導致截斷）。此模型的 Workers AI schema 支援兩項參數，不支援 `repetition_penalty`，參數效果仍需真實部署驗證。上游回應後先輸出 `synthesis_response`，只記錄 choice 數、白名單完成代碼、content 長度、有無 reasoning 與 token 用量，不記錄模型內容。綜整失敗時再輸出 `synthesis_error`，`reason` 為 `missing_binding`／`timeout`／`model_error`／`invalid_completion`／`incomplete_completion`／`invalid_content`／`invalid_content_json`／`invalid_synthesis`；chat completion 路徑另附白名單過濾後的 `finish_reason`（例如輸出達上限時為 `length`），gpt-oss 的 `response` 路徑沒有完成代碼，截斷只會以 `invalid_content_json` 呈現。診斷只含固定字串、完成代碼與延遲毫秒，不記錄模型內容或使用者原文；輸出 token 用量亦見同一 request ID 的 `usage` 事件。
+有 `cofacts-human`／`cofacts-ai` 證據時，使用者提供的 `provided-url` 證據會一併送入綜整模型，但僅作為背景：prompt 標記其為使用者提供、未經獨立驗證、優先序最低；若與其他證據衝突，依來源權威性、引用品質與時效比較，不可只按 source 標籤裁決，也不得僅憑使用者網址支持 claim，也不進 `related_checks`。只有使用者提供的網址而無任何 Cofacts 證據時，綜整前會排除 `provided-url` 證據（送入空陣列），讓空證據的常識判斷契約生效。`meta.no_relevant_evidence` 以 Cofacts 證據計算，url-only 時同樣為 `true`。
+
+綜整呼叫依 Gemma 4 的 Workers AI 官方設定帶 `chat_template_kwargs: { enable_thinking: false }`，避免模型把輸出額度耗在 reasoning 後留下空的 `message.content`。此模型的 Workers AI schema 支援兩項參數，不支援 `repetition_penalty`，參數效果仍需真實部署驗證。上游回應後先輸出 `synthesis_response`，只記錄 choice 數、白名單完成代碼、content 長度、有無 reasoning 與 token 用量，不記錄模型內容。綜整失敗時再輸出 `synthesis_error`，`reason` 為 `missing_binding`／`timeout`／`model_error`／`invalid_completion`／`incomplete_completion`／`invalid_content`／`invalid_content_json`／`invalid_synthesis`；chat completion 路徑另附白名單過濾後的 `finish_reason`（例如輸出達上限時為 `length`），gpt-oss 的 `response` 路徑沒有完成代碼，截斷只會以 `invalid_content_json` 呈現。診斷只含固定字串、完成代碼與延遲毫秒，不記錄模型內容或使用者原文；輸出 token 用量亦見同一 request ID 的 `usage` 事件。
 
 ## URL 抓取邊界
 
-每次目標抓取前檢查 URL 與公開 DNS 的 A／AAAA 結果；只要包含非公開位址便拒絕。使用 Cloudflare 公開 DNS-over-HTTPS，不需要額外 secret。手動處理最多 3 次 redirect，逐次重新驗證。DNS 與整個抓取／讀取流程共用 10 秒期限，body 最多 1 MB；支援 UTF-8／ASCII 的 `text/html`、`text/plain`，拒絕明示的其他編碼。
-
-HTML 使用 Workers 原生 `HTMLRewriter` 移除腳本、樣式、樣板等內容，再解碼 HTML entities、擷取最多 12,000 個 UTF-16 code unit。網站需要 JavaScript 才產生的內容不會被執行。來源只標為 `user-provided`，不自動視為可信。
+HTML 使用 Workers 原生 `HTMLRewriter` 移除腳本、樣式、樣板等內容，再解碼 HTML entities、擷取最多 12,000 個 UTF-16 code unit。網站需要 JavaScript 才產生的內容不會被執行。來源只標為 `user-provided`，不自動視為可信；抓取成功且有 Cofacts 證據時作為最低優先序的背景送入綜整模型，查無 Cofacts 證據時不送入模型（見「證據契約」）。
 
 DNS 預檢與 Workers `fetch()` 是兩次解析，無法在一般 Worker fetch 中釘選任意目標 IP；DNS rebinding 的最終隔離依賴 Cloudflare 執行環境。此 fetcher 不能直接移到可存取私網的 Node 伺服器；若要部署於該環境，需改用能固定連線 IP 的出口代理。模型 binding timeout 會停止等待，但 Workers AI API 沒有在本介面提供取消推論的方法，已送出的推論仍可能計費。
 

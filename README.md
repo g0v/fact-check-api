@@ -103,7 +103,11 @@ curl --get 'http://localhost:5173/api/fact-check' \
 
 POST 的 `Content-Type` 必須為 `application/json`，本文上限為 128,000 bytes。沒有網址時省略 `url`，不接受空字串或 `null`。
 
-URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文字，不執行網頁 JavaScript；失敗時保留警告，Cofacts 流程照常。
+URL 提供查核背景，未經獨立驗證且優先序最低：抓取成功且有 Cofacts 查核證據時，網址內容會以 `user-provided` 標記送入綜整模型作為背景；若與其他證據衝突，依來源權威性、引用品質與時效比較，不可只按 source 標籤裁決，也不得僅憑使用者網址支持 claim；查無相關 Cofacts 查核資料時，網址文字不會作為證據，Gemma 改以一般常識判斷，`confidence` 由程式下修至最高 0.5。失敗時保留警告，Cofacts 流程照常。
+
+#### URL 抓取邊界
+
+每次抓取目標前，會透過 Cloudflare 公開 DNS-over-HTTPS 檢查 URL 的公開 DNS A／AAAA 結果；只要結果包含非公開位址便拒絕，且不需要額外 secret。抓取時手動處理最多 3 次 redirect，每次都重新驗證目標；DNS 查詢與整個抓取／讀取流程共用 10 秒期限，回應 body 上限為 1 MB。僅接受 UTF-8／ASCII 編碼的 `text/html` 與 `text/plain`，拒絕明示的其他編碼，且不執行網頁 JavaScript。
 
 ## 回應格式
 
@@ -137,14 +141,14 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
 
 若輸入有 `url`，回應也會保留該欄位。查核回應附有 `X-Request-Id` 與 `Cache-Control: no-store`。
 
-| 欄位             | 意義                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| `factuality`     | 0～1，證據支持主張的程度，不是主張為真的機率；查無證據時表示依常識判斷主張為真的程度 |
-| `confidence`     | 0～1，判斷所依據的證據是否充分、可靠且一致；查無證據時由程式下修至最高 0.5           |
-| `verdict`        | 下表列出的固定判斷分類                                                               |
-| `feedback`       | 繁體中文說明，包含適用範圍、證據限制與查證方向                                       |
-| `related_checks` | 相關人工／AI 查核及其來源連結                                                        |
-| `meta`           | request ID、候選／證據數量、URL 背景使用狀態、`no_relevant_evidence` 旗標與警告      |
+| 欄位             | 意義                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `factuality`     | 0～1，證據支持主張的程度，不是主張為真的機率；查無證據時表示依常識判斷主張為真的程度                        |
+| `confidence`     | 0～1，判斷所依據的證據是否充分、可靠且一致；查無證據時由程式下修至最高 0.5                                  |
+| `verdict`        | 下表列出的固定判斷分類                                                                                      |
+| `feedback`       | 繁體中文說明，包含適用範圍、證據限制與查證方向                                                              |
+| `related_checks` | 相關人工／AI 查核及其來源連結                                                                               |
+| `meta`           | request ID、候選／證據數量、URL 背景使用狀態、`no_relevant_evidence`（查無相關 Cofacts 查核資料）旗標與警告 |
 
 | verdict                 | 意義                 |
 | ----------------------- | -------------------- |
@@ -208,7 +212,7 @@ HTTP 200 時仍需檢查 `status`：
 | 503  | `BUDGET_UNAVAILABLE`   | 用量控管的 Durable Object 暫時無法使用，稍後重試                   |
 | 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                           |
 
-Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
+Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時一律回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
 
 ## 每日 Workers AI 用量上限
 
@@ -231,7 +235,7 @@ Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼�
 | 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
 | 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
 
-初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷，程式以 `meta.no_relevant_evidence` 標記並把 `confidence` 下修至最高 0.65，常識也無法判斷時才回 `insufficient_evidence`。
+初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據、或只有使用者提供的網址而無任何 Cofacts 人工／AI 查核時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷（網址文字不作為查核證據），程式以 `meta.no_relevant_evidence` 標記此狀態，並把 `confidence` 下修至最高 0.5，常識也無法判斷時才回 `insufficient_evidence`。
 
 ## 開發與驗證
 

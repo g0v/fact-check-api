@@ -101,10 +101,7 @@ export async function factCheck(
   meta.url_context_used = Boolean(urlContext);
   let candidates: CofactsCandidate[] = [];
   if (searchResult.status === "fulfilled") candidates = searchResult.value;
-  else {
-    if (!urlContext) throw upstreamError("cofacts-search");
-    warn("cofacts-search");
-  }
+  else throw upstreamError("cofacts-search");
   meta.cofacts_candidates = candidates.length;
   log({
     event: "candidates",
@@ -139,8 +136,7 @@ export async function factCheck(
         selected_article_ids: selected.map((item) => item.articleId),
       });
     } catch {
-      if (!urlContext) throw upstreamError("relevance");
-      warn("relevance");
+      throw upstreamError("relevance");
     }
   }
   meta.cofacts_relevant = selected.length;
@@ -153,8 +149,9 @@ export async function factCheck(
     (item) => item.source === "cofacts-human",
   ).length;
   meta.cofacts_ai_checks = details.evidence.filter((item) => item.source === "cofacts-ai").length;
-  // Issue #10：完全沒有可用證據時標記狀態，交 Gemma 常識判斷並下修 confidence。
-  meta.no_relevant_evidence = evidence.length === 0;
+  // Issue #10：查無相關 Cofacts 查核資料（含只有使用者網址的情境）時標記狀態，
+  // 交 Gemma 常識判斷並下修 confidence。
+  meta.no_relevant_evidence = details.evidence.length === 0;
   log({
     event: "evidence",
     request_id: requestId,

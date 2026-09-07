@@ -81,12 +81,18 @@ export async function synthesize(
   try {
     if (!env.AI) throw new Error(synthesisErrorMessages.missing_binding);
     const ai = env.AI;
+    // 只有使用者提供的網址而無 Cofacts 證據時，網址文字不作為查核證據，
+    // 視同查無相關查核資料，讓 prompt 的空證據（常識判斷）契約自然生效，
+    // 避免使用者以自己的來源支撐自己的主張。
+    const hasIndependentEvidence = evidence.some(
+      (item) => item.source === "cofacts-human" || item.source === "cofacts-ai",
+    );
     // 平均分配文字預算，保留每筆證據，避免大量回覆擠爆模型 context。
     const textBudget = Math.min(
       LIMITS.evidenceText,
       Math.floor(60_000 / Math.max(evidence.length, 1)),
     );
-    const modelEvidence = evidence.map((item) => ({
+    const modelEvidence = (hasIndependentEvidence ? evidence : []).map((item) => ({
       ...item,
       evidenceText: item.evidenceText.slice(0, textBudget),
       articleText: item.articleText?.slice(0, Math.floor(textBudget / 2)),
@@ -127,7 +133,7 @@ export async function synthesize(
       latency_ms: Date.now() - start,
     });
     reason = "invalid_synthesis";
-    return parseSynthesis(parseModelJson(output), evidence.length > 0);
+    return parseSynthesis(parseModelJson(output), hasIndependentEvidence);
   } catch (error) {
     const isTimeout = error instanceof HttpError && error.reason === "timeout";
     log({

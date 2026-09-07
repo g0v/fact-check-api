@@ -73,11 +73,13 @@ function parseCacheEntry(value: unknown): CacheEntry {
   if (parseModeration(result.moderation).decision === "block")
     throw new Error("不可採用封鎖結果的快取。");
   const checks = array(result.related_checks);
-  const hasEvidence = checks.length > 0 || meta.url_context_used === true;
-  if (meta.no_relevant_evidence !== !hasEvidence) throw new Error("快取證據狀態不一致。");
-  parseSynthesis(result, hasEvidence);
+  // 只有使用者提供網址而無 Cofacts 證據時，與完全無證據同樣走常識判斷契約。
+  const hasIndependentEvidence = checks.length > 0;
+  if (meta.no_relevant_evidence !== !hasIndependentEvidence)
+    throw new Error("快取證據狀態不一致。");
+  parseSynthesis(result, hasIndependentEvidence);
   // parseSynthesis 只下修回傳副本；快取原值超過上限就整筆拒絕，不服務未下修的結果。
-  if (!hasEvidence && unitNumber(result.confidence) > 0.5)
+  if (meta.no_relevant_evidence && unitNumber(result.confidence) > 0.5)
     throw new Error("快取在無證據時信心值超過上限。");
   for (const value of checks) {
     const check = record(value);

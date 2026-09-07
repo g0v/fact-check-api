@@ -172,10 +172,14 @@ const verdicts = [
             bytes。沒有網址時請省略 <code>url</code>，不要傳空字串或 <code>null</code>。
           </p>
           <div class="callout">
-            <strong>網址提供背景，不代表可信。</strong>
+            <strong>網址提供查核背景，未經獨立驗證，優先順序最低。</strong>
             <p>
               支援 HTML 與純文字頁面，不執行網頁 JavaScript。網址抓取失敗時，Cofacts
-              查核仍會繼續，並在回應保留警告。
+              查核仍會繼續，並在回應保留警告。網址內容由使用者提供：有 Cofacts
+              查核證據時，僅作為優先序最低的背景送入綜整模型；若與其他證據衝突，依來源權威性、
+              引用品質與時效比較，不可只按 source 標籤裁決，也不得僅憑使用者網址支持
+              claim；若查無相關 Cofacts
+              查核資料，網址不會作為證據，判斷將改以模型常識推估，信心值上限 0.5。
             </p>
           </div>
         </section>
@@ -317,8 +321,8 @@ const verdicts = [
           <p>
             Gemma（證據綜整）失敗回 502。Safeguard 暫時失敗時跳過安全分類，並將 moderation.decision
             標記為 skipped，以 partial 狀態繼續查核；只有缺少金鑰
-            （OPENROUTER_API_KEY）等設定錯誤才回 502。 Cofacts 搜尋或語意初篩失敗時，只有已成功取得
-            URL 文字才能繼續並回 partial，否則回 502。 單篇詳細證據失敗則保留其他資料。
+            （OPENROUTER_API_KEY）等設定錯誤才回 502。Cofacts 搜尋或語意初篩失敗時一律回
+            502。單篇詳細證據失敗則保留其他資料。
           </p>
           <p class="note">
             查核回應附有 <code>X-Request-Id</code> 與 <code>Cache-Control: no-store</code>。<code
@@ -364,7 +368,11 @@ const verdicts = [
               <span class="step-index">5</span>
               <div>
                 <h3>綜整結果</h3>
-                <p>Gemma 根據整理後的證據產生判斷；沒有足夠證據時，回傳證據不足。</p>
+                <p>
+                  Gemma 根據整理後的證據產生判斷；查無相關 Cofacts
+                  查核資料時（包括只附網址、沒有任何查核回覆的情況），改以模型常識推估，回傳的信心值上限
+                  0.5，證據不足時回傳證據不足。
+                </p>
               </div>
             </li>
           </ol>

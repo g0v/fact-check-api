@@ -86,12 +86,13 @@ const fields: Record<string, FieldInfo> = {
   "meta.cofacts_ai_checks": { label: "AI 證據數", description: "實際採用的 Cofacts AI 回覆數量。" },
   "meta.url_context_used": {
     label: "是否使用網址背景",
-    description: "true：已使用提供網址的文字作為背景；false：沒有使用。",
+    description:
+      "true：已抓取提供網址的文字作為背景；內容由使用者提供、未經查證，僅在有 Cofacts 證據時以最低優先序送入綜整模型。false：沒有使用。",
   },
   "meta.no_relevant_evidence": {
     label: "是否查無相關證據",
     description:
-      "true：查無相關查核資料，判斷為模型常識推估，confidence 已下修至最高 0.5；false：有實際證據。",
+      "true：查無相關 Cofacts 查核資料（含只提供網址、沒有任何查核回覆的情況），判斷為模型常識推估，confidence 已下修至最高 0.5；false：有採用 Cofacts 查核證據。",
   },
   "meta.cache": {
     label: "Worker 快取",
