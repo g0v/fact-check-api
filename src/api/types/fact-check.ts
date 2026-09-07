@@ -73,6 +73,7 @@ export type FactCheckResponse = FactCheckInput & {
     cofacts_human_checks: number;
     cofacts_ai_checks: number;
     url_context_used: boolean;
+    no_relevant_evidence: boolean;
     warnings: Warning[];
     cache?: {
       status: "hit" | "miss" | "bypass";

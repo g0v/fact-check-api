@@ -107,7 +107,7 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
 
 ## 回應格式
 
-下列為「證據不足」的格式示例，並非對範例主張的實際查核結果。
+下列為「查無相關查核資料，改以常識判斷」的格式示例，並非對範例主張的實際查核結果。
 
 ```json
 {
@@ -117,11 +117,11 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
     "decision": "allow",
     "categories": []
   },
-  "factuality": 0.5,
-  "confidence": 0.1,
-  "verdict": "insufficient_evidence",
+  "factuality": 0.7,
+  "confidence": 0.4,
+  "verdict": "mostly_supported",
   "related_checks": [],
-  "feedback": "目前沒有足夠相關證據，無法判定這項主張。",
+  "feedback": "查無相關查核資料，以下為常識判斷：此主張與常見制度描述大致相符，請自行查證。",
   "meta": {
     "request_id": "example-request-id",
     "cofacts_candidates": 0,
@@ -129,6 +129,7 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
     "cofacts_human_checks": 0,
     "cofacts_ai_checks": 0,
     "url_context_used": false,
+    "no_relevant_evidence": true,
     "warnings": []
   }
 }
@@ -136,14 +137,14 @@ URL 只提供背景，不自動視為可信來源。抓取支援 HTML 與純文�
 
 若輸入有 `url`，回應也會保留該欄位。查核回應附有 `X-Request-Id` 與 `Cache-Control: no-store`。
 
-| 欄位             | 意義                                                                      |
-| ---------------- | ------------------------------------------------------------------------- |
-| `factuality`     | 0～1，證據支持主張的程度，不是主張為真的機率；無證據時的 0.5 表示無法判定 |
-| `confidence`     | 0～1，判斷所依據的證據是否充分、可靠且一致                                |
-| `verdict`        | 下表列出的固定判斷分類                                                    |
-| `feedback`       | 繁體中文說明，包含適用範圍、證據限制與查證方向                            |
-| `related_checks` | 相關人工／AI 查核及其來源連結                                             |
-| `meta`           | request ID、候選／證據數量、URL 背景使用狀態與警告                        |
+| 欄位             | 意義                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| `factuality`     | 0～1，證據支持主張的程度，不是主張為真的機率；查無證據時表示依常識判斷主張為真的程度 |
+| `confidence`     | 0～1，判斷所依據的證據是否充分、可靠且一致；查無證據時由程式下修至最高 0.5           |
+| `verdict`        | 下表列出的固定判斷分類                                                               |
+| `feedback`       | 繁體中文說明，包含適用範圍、證據限制與查證方向                                       |
+| `related_checks` | 相關人工／AI 查核及其來源連結                                                        |
+| `meta`           | request ID、候選／證據數量、URL 背景使用狀態、`no_relevant_evidence` 旗標與警告      |
 
 | verdict                 | 意義                 |
 | ----------------------- | -------------------- |
@@ -160,7 +161,7 @@ Cofacts 的 `retrieval_score` 只是搜尋排序，不是百分比、機率或�
 
 ## 相同問題的 Worker 快取
 
-GET／POST 通過原有驗證後，共用 Worker 端的查核結果快取，預設保留 **1 小時**。文字去除首尾空白、網址經 API 正規化後完全相同才會命中；換網址或修改內文會重新查核。只儲存 `completed` 且沒有警告的結果，包括「證據不足」；`partial`、`blocked` 與錯誤不儲存。
+GET／POST 通過原有驗證後，共用 Worker 端的查核結果快取，預設保留 **1 小時**。文字去除首尾空白、網址經 API 正規化後完全相同才會命中；換網址或修改內文會重新查核。只儲存 `completed` 且沒有警告的結果，包括「查無相關資料的常識判斷」；`partial`、`blocked` 與錯誤不儲存。
 
 命中時重用原有安全分類、證據與模型結果，不重新呼叫上游；`X-Request-Id` 與 `meta.request_id` 仍是本次的新識別碼。`Cache-Control: no-store` 保持不變，瀏覽器不儲存查核回應。Worker 快取與瀏覽器快取分開管理。
 
@@ -217,7 +218,7 @@ Safeguard 或 Gemma 失敗回 502，不跳過安全層、不自行拼湊分數�
 | 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
 | 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
 
-初篩門檻為 `relevant: true` 且 `relevance >= 0.5`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；沒有證據時應回 `insufficient_evidence`，不使用模型記憶替代證據。
+初篩門檻為 `relevant: true` 且 `relevance >= 0.5`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷，程式以 `meta.no_relevant_evidence` 標記並把 `confidence` 下修至最高 0.5，常識也無法判斷時才回 `insufficient_evidence`。
 
 ## 開發與驗證
 

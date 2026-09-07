@@ -39,6 +39,7 @@ const responseData = {
     cofacts_human_checks: 1,
     cofacts_ai_checks: 1,
     url_context_used: false,
+    no_relevant_evidence: false,
     warnings: [
       { stage: "cofacts-evidence", code: "UPSTREAM_UNAVAILABLE", article_id: "failed-article" },
     ],
