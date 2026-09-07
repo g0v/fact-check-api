@@ -1,0 +1,22 @@
+{
+  "claim": "中國共產黨曾經統治過台灣",
+  "source": "使用者提供的 request ID 8fa50ca7-a30f-4bd4-bf5d-43e4c33d858b 候選清單；2026-09-07 對照 Cofacts 公開文章",
+  "note": "標註只評估原始文章與主張的相關性，不代表認可文章的真實性或查核回覆。live 測試會取得原文，不以模擬輸出驗收模型能力。",
+  "candidates": [
+    {
+      "id": "1g6z4sanzgurk",
+      "expected": false,
+      "reason": "政治人物姓名與血統的傳言未討論中共是否曾實際治理台灣。"
+    },
+    {
+      "id": "2phkmkacjycfw",
+      "expected": true,
+      "reason": "原文第三、四集的介紹敘述國府退守台灣、兩岸分治與兩地治理方式，提供評估治理歷史所需的具體背景；不應只因沒有重述或支持 claim 而排除。"
+    },
+    {
+      "id": "3lu85zjdxxdtb",
+      "expected": false,
+      "reason": "高中內有共產黨組織的敘述，不等於中共曾實際治理台灣。"
+    }
+  ]
+}

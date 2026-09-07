@@ -58,7 +58,9 @@ describe("查核結果快取", () => {
     expect(entry.result).not.toHaveProperty("text");
     expect(entry.result).not.toHaveProperty("url");
     const key = cache.put.mock.calls[0][0];
-    expect(key.url).toMatch(/\/v1\/[a-f0-9]{64}$/);
+    const cachePath = new URL(key.url).pathname;
+    expect(cachePath).toMatch(/^\/__fact-check-cache\/[^/]+\/[a-f0-9]{64}$/);
+    expect(cachePath.split("/")[2]).toBe(RESULT_CACHE.version);
     const headerNames: string[] = [];
     key.headers.forEach((_value, name) => headerNames.push(name));
     expect(headerNames).toEqual([]);

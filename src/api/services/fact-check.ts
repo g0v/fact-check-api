@@ -95,7 +95,9 @@ export async function factCheck(
   if (candidates.length) {
     try {
       const relevance = await stage("relevance", () =>
-        filterRelevantCandidates(input.text, candidates, env),
+        filterRelevantCandidates(input.text, candidates, env, (event) =>
+          log({ ...event, request_id: requestId }),
+        ),
       );
       selected = relevance.selected;
       log({

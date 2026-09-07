@@ -42,6 +42,10 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     ]);
     expect(JSON.stringify(synthesis)).not.toContain("國中小性教育");
     const logs = JSON.stringify(h.log.mock.calls);
+    for (const event of ["relevance_model_request", "relevance_model_response"])
+      expect(h.log).toHaveBeenCalledWith(
+        expect.objectContaining({ event, request_id: result.meta.request_id }),
+      );
     expect(h.log).toHaveBeenCalledWith({
       event: "relevance",
       request_id: result.meta.request_id,
