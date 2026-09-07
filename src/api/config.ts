@@ -19,7 +19,7 @@ export const LIMITS = {
   candidates: 15,
   candidateText: 3_000,
   relevant: 5,
-  relevanceThreshold: 0.65,
+  relevanceThreshold: 0.5, // 測試用0.5, 原為0.65
   evidenceText: 6_000,
   repliesPerArticle: 10,
   urlText: 12_000,

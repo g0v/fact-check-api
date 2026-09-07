@@ -217,7 +217,7 @@ Safeguard 或 Gemma 失敗回 502，不跳過安全層、不自行拼湊分數�
 | 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
 | 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
 
-初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；沒有證據時應回 `insufficient_evidence`，不使用模型記憶替代證據。
+初篩門檻為 `relevant: true` 且 `relevance >= 0.5`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；沒有證據時應回 `insufficient_evidence`，不使用模型記憶替代證據。
 
 ## 開發與驗證
 

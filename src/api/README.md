@@ -92,7 +92,7 @@ Workers 的 `fetch` 不支援 `redirect: "error"`，使用時會在連線前拋�
 
 ## 證據契約
 
-候選搜尋預設取 15 筆，只查 `id`、`text`、`score`；保留 `searchScore`，不依此篩掉文章。初篩一次呼叫 `gpt-oss-20b`，每篇送入最多 3,000 個 UTF-16 code unit，不附搜尋分數。輸出必須涵蓋所有候選 ID，且不得新增或重複。只有 `relevant: true` 且 `relevance >= 0.65` 才保留，依相關性排序、最多 5 篇。
+候選搜尋預設取 15 筆，只查 `id`、`text`、`score`；保留 `searchScore`，不依此篩掉文章。初篩一次呼叫 `gpt-oss-20b`，每篇送入最多 3,000 個 UTF-16 code unit，不附搜尋分數。輸出必須涵蓋所有候選 ID，且不得新增或重複。只有 `relevant: true` 且 `relevance >= 0.5` 才保留，依相關性排序、最多 5 篇。
 
 若首頁的「通過相關性初篩數」一直是 1，先查看 `meta.cache.status`：`hit` 代表沿用先前結果，不會重新初篩。未命中快取時，可用相同 request ID 的 `relevance` log 排查：`candidate_count` 是候選數；`article_ids`、`relevant_flags`、`relevance_scores` 按相同索引對應每篇文章；`relevance_threshold` 與 `selection_limit` 是分數門檻與保留上限；`selected_count` 及 `selected_article_ids` 是實際採用結果。此數字以文章計算，一篇文章可以提供多則查核回覆。診斷不記錄文章內容或模型的自由文字理由。
 
@@ -123,7 +123,7 @@ vp run typecheck
 
 `tests/http-worker.test.ts` 將實際 Safeguard 與 DNS 程式碼打包後交給 workerd，驗證原生 `fetch` 可送出請求且拒絕上游重新導向。全部 outbound 由記憶體中的假上游回應，不讀取環境檔，也不連線外部服務。
 
-`tests/fixtures/relevance-cases.json` 保存藍圖的四個 ID 與標註；一般回歸測試只驗證模型輸出的處理邏輯，不代表模型已通過語意驗收。真實回歸會取得原文，並透過 Workers AI remote binding 呼叫模型：
+`tests/fixtures/relevance-cases.json` 保存藍圖的四個 ID 與標註；`tests/fixtures/relevance-history-cases.json` 保存治理歷史案例，檢查模型能否保留直接相關的歷史背景，並排除只有政治人物或政黨關鍵字重疊的文章。標註只代表相關性，不代表文章內容為真。初篩提示明確要求支持與反駁主張的內容皆可相關，不能以立場相反為由排除。一般回歸測試只驗證模型輸出的處理邏輯，不代表模型已通過語意驗收。真實回歸會取得原文，並透過 Workers AI remote binding 呼叫模型：
 
 ```bash
 FACT_CHECK_LIVE=1 vp test tests/relevance.live.test.ts
