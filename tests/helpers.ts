@@ -74,15 +74,20 @@ export function harness(
     synthesis?: unknown;
     synthesisFailure?: boolean;
     urlFailure?: boolean;
+    // 附加到 OpenRouter 與 Workers AI 回應的 usage 欄位；省略時走字元估算路徑。
+    usage?: { prompt_tokens: number; completion_tokens: number };
   } = {},
 ) {
   const fetcher = vi.fn<Fetcher>(async (input, init) => {
     const url = new URL(String(input));
     if (url.hostname === "openrouter.ai") {
       if (options.safetyFailure) return new Response("服務錯誤", { status: 500 });
-      return Response.json(
-        completion(options.moderation ?? { decision: options.decision ?? "allow", categories: [] }),
-      );
+      return Response.json({
+        ...completion(
+          options.moderation ?? { decision: options.decision ?? "allow", categories: [] },
+        ),
+        ...(options.usage ? { usage: options.usage } : {}),
+      });
     }
     if (url.hostname === "api.cofacts.tw") {
       const body = JSON.parse(String(init?.body));
@@ -108,11 +113,17 @@ export function harness(
   const run = vi.fn<NonNullable<ApiBindings["AI"]>["run"]>(async (model) => {
     if (model === MODELS.relevance) {
       if (options.relevanceFailure) throw new Error("初篩測試失敗。");
-      return { response: JSON.stringify(options.relevance ?? relevanceOutput) };
+      return {
+        response: JSON.stringify(options.relevance ?? relevanceOutput),
+        ...(options.usage ? { usage: options.usage } : {}),
+      };
     }
     if (model !== MODELS.synthesis) throw new Error("使用未預期的模型。");
     if (options.synthesisFailure) throw new Error("綜整測試失敗。");
-    return completion(options.synthesis ?? synthesisOutput);
+    return {
+      ...completion(options.synthesis ?? synthesisOutput),
+      ...(options.usage ? { usage: options.usage } : {}),
+    };
   });
   const env: ApiBindings = { OPENROUTER_API_KEY: "your-openrouter-api-key", AI: { run } };
   return { env, fetcher, run, log: vi.fn() };

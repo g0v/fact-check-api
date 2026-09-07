@@ -4,6 +4,7 @@ import AboutView from "./views/About.vue";
 import { renderPage } from "./ssr/render";
 import { headForHome, headForAbout } from "./ssr/heads";
 import { api } from "./api";
+export { UsageBudget } from "./api/services/usage-budget";
 import type { ApiBindings } from "./api/types/fact-check";
 
 // Cloudflare Worker 綁定型別；ASSETS 在 wrangler.jsonc 對應到 ./public/

@@ -5,6 +5,13 @@
   "compatibility_date": "2026-04-17",
   "ai": { "binding": "AI" },
   "assets": { "directory": "./public/", "binding": "ASSETS" },
+  // 議題 #9：每小時模型費用上限（美元）；調整此值不需改程式。
+  "vars": { "HOURLY_BUDGET_USD": "0.01" },
+  "durable_objects": {
+    "bindings": [{ "name": "USAGE_BUDGET", "class_name": "UsageBudget" }],
+  },
+  // Free 方案只支援 SQLite 儲存後端的 Durable Objects。
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UsageBudget"] }],
   "observability": {
     "enabled": true,
   },

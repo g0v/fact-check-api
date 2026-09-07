@@ -15,6 +15,7 @@ api.use("*", async (c, next) => {
 api.onError((error, c) => {
   const known = error instanceof ApiError;
   const status = known ? error.status : 500;
+  if (known && error.retryAfterSeconds) c.header("Retry-After", String(error.retryAfterSeconds));
   console.info(
     JSON.stringify({
       event: "error",

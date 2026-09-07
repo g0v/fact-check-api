@@ -13,6 +13,7 @@ import type {
 import { ApiError, upstreamError } from "../utils/errors";
 import type { Fetcher } from "../utils/http";
 import { createStageRunner, type Logger } from "../utils/logging";
+import type { UsageRecorder } from "../utils/usage";
 import { getCofactsEvidence } from "./cofacts-evidence";
 import { searchCofactsCandidates } from "./cofacts-search";
 import { moderate } from "./moderation";
@@ -23,10 +24,11 @@ import { fetchUrlContext } from "./url-context";
 export async function factCheck(
   input: FactCheckInput,
   env: ApiBindings,
-  options: { requestId?: string; fetcher?: Fetcher; log?: Logger } = {},
+  options: { requestId?: string; fetcher?: Fetcher; log?: Logger; usage?: UsageRecorder } = {},
 ): Promise<FactCheckResponse> {
   const requestId = options.requestId ?? crypto.randomUUID();
   const fetcher = options.fetcher ?? fetch;
+  const usage: UsageRecorder = options.usage ?? (() => undefined);
   const log: Logger = options.log ?? ((event) => console.info(JSON.stringify(event)));
   const stage = createStageRunner(requestId, log);
   const warnings: Warning[] = [];
@@ -57,7 +59,13 @@ export async function factCheck(
   let moderation: ModerationResult;
   try {
     moderation = await stage("moderation", () =>
-      moderate(input.text, env, fetcher, (event) => log({ ...event, request_id: requestId })),
+      moderate(
+        input.text,
+        env,
+        fetcher,
+        (event) => log({ ...event, request_id: requestId }),
+        usage,
+      ),
     );
   } catch (error) {
     // Issue #12：OpenRouter 不穩定時跳過安全分類、標記警告並繼續查核；設定錯誤仍回 502。
@@ -109,8 +117,12 @@ export async function factCheck(
   if (candidates.length) {
     try {
       const relevance = await stage("relevance", () =>
-        filterRelevantCandidates(input.text, candidates, env, (event) =>
-          log({ ...event, request_id: requestId }),
+        filterRelevantCandidates(
+          input.text,
+          candidates,
+          env,
+          (event) => log({ ...event, request_id: requestId }),
+          usage,
         ),
       );
       selected = relevance.selected;
@@ -151,7 +163,9 @@ export async function factCheck(
     has_url_context: Boolean(urlContext),
     no_relevant_evidence: meta.no_relevant_evidence,
   });
-  const result = await stage("synthesis", () => synthesize(input, moderation, evidence, env));
+  const result = await stage("synthesis", () =>
+    synthesize(input, moderation, evidence, env, usage),
+  );
   const relatedChecks: RelatedCheck[] = details.evidence.map((item) => ({
     type: item.source === "cofacts-human" ? "cofacts_human" : "cofacts_ai",
     text: item.evidenceText,

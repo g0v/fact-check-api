@@ -6,8 +6,10 @@ import { parseModeration, parseSynthesis } from "../schemas/fact-check";
 import type { ApiBindings, FactCheckInput, FactCheckResponse } from "../types/fact-check";
 import { readLimitedText, withTimeout, type Fetcher } from "../utils/http";
 import type { Logger } from "../utils/logging";
+import { createUsageMeter, usageCostUsd, type UsageMeter } from "../utils/usage";
 import { array, enumValue, record, string, unitNumber } from "../utils/validation";
 import { factCheck } from "./fact-check";
+import { reserveHourlyBudget, settleHourlyBudget } from "./usage-budget";
 
 export type ResultCache = {
   match(request: Request): Promise<Response | undefined>;
@@ -164,7 +166,30 @@ export async function cachedFactCheck(
     cacheLog("error", "read");
   }
 
-  const result = await factCheck(input, env, { ...options, requestId, log });
+  // 背景工作交給 waitUntil；沒有 execution context 時同步等待，確保結果寫入與結算完成。
+  const schedule = async (task: Promise<void>, event: string) => {
+    if (!options.waitUntil) return task;
+    try {
+      options.waitUntil(task);
+    } catch {
+      log({ event, request_id: requestId, status: "error", operation: "schedule" });
+      await task;
+    }
+  };
+  // 議題 #9：未命中快取才會呼叫模型，先向 Durable Object 預留本小時額度，查核後以實際用量結算。
+  const reservation = await reserveHourlyBudget(env, input.text, requestId, log);
+  const meter = createUsageMeter();
+  let result: FactCheckResponse;
+  try {
+    result = await factCheck(input, env, { ...options, requestId, log, usage: meter.record });
+  } finally {
+    logUsage(meter, requestId, log);
+    if (reservation)
+      await schedule(
+        settleHourlyBudget(env, reservation, meter.totalUsd(), requestId, log),
+        "budget",
+      );
+  }
   if (cache && key && result.status === "completed" && result.meta.warnings.length === 0) {
     const { request_id: _requestId, cache: _cache, ...meta } = result.meta;
     const { text: _text, url: _url, meta: _meta, ...content } = result;
@@ -198,15 +223,25 @@ export async function cachedFactCheck(
         cacheLog("error", "write");
       }
     };
-    const task = write();
-    if (options.waitUntil) {
-      try {
-        options.waitUntil(task);
-      } catch {
-        cacheLog("error", "schedule");
-        await task;
-      }
-    } else await task;
+    await schedule(write(), "cache");
   } else cacheLog("bypass", "write");
   return { ...result, meta: { ...result.meta, cache: { status: cacheStatus } } };
+}
+
+// 只記錄各階段的 token 數與依牌價換算的金額，不含原文或模型輸出。
+function logUsage(meter: UsageMeter, requestId: string, log: Logger) {
+  const costs = meter.samples.map((item) =>
+    usageCostUsd(item.stage, item.promptTokens, item.completionTokens),
+  );
+  log({
+    event: "usage",
+    request_id: requestId,
+    stages: meter.samples.map((item) => item.stage),
+    models: meter.samples.map((item) => item.model),
+    prompt_tokens: meter.samples.map((item) => item.promptTokens),
+    completion_tokens: meter.samples.map((item) => item.completionTokens),
+    estimated: meter.samples.map((item) => item.estimated),
+    cost_usd: costs,
+    total_cost_usd: meter.totalUsd(),
+  });
 }

@@ -5,18 +5,21 @@ import type {
   ApiBindings,
   Evidence,
   FactCheckInput,
+  ModelMessage,
   ModerationResult,
   SynthesisResult,
 } from "../types/fact-check";
 import { upstreamError } from "../utils/errors";
 import { withTimeout } from "../utils/http";
 import { parseModelJson } from "../utils/model";
+import { measureUsage, type UsageRecorder } from "../utils/usage";
 
 export async function synthesize(
   input: FactCheckInput,
   moderation: ModerationResult,
   evidence: Evidence[],
   env: ApiBindings,
+  usage: UsageRecorder = () => {},
 ): Promise<SynthesisResult> {
   try {
     if (!env.AI) throw new Error("尚未設定 Workers AI。");
@@ -34,16 +37,17 @@ export async function synthesize(
       sourceUrls: item.sourceUrls?.slice(0, 3),
       articleReferences: item.articleReferences?.slice(0, 3),
     }));
+    const messages: ModelMessage[] = [
+      { role: "system", content: synthesisPrompt },
+      {
+        role: "user",
+        content: JSON.stringify({ claim: input.text, moderation, evidence: modelEvidence }),
+      },
+    ];
     const output = await withTimeout(
       () =>
         ai.run(MODELS.synthesis, {
-          messages: [
-            { role: "system", content: synthesisPrompt },
-            {
-              role: "user",
-              content: JSON.stringify({ claim: input.text, moderation, evidence: modelEvidence }),
-            },
-          ],
+          messages,
           stream: false,
           temperature: 0,
           max_completion_tokens: 4_096,
@@ -51,6 +55,7 @@ export async function synthesize(
         }),
       LIMITS.modelTimeoutMs,
     );
+    usage(measureUsage("synthesis", MODELS.synthesis, output, JSON.stringify(messages)));
     return parseSynthesis(parseModelJson(output), evidence.length > 0);
   } catch {
     throw upstreamError("synthesis");

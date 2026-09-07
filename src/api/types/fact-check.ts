@@ -85,8 +85,18 @@ export type FactCheckResponse = FactCheckInput & {
 };
 
 export type ModelMessage = { role: "system" | "user"; content: string };
+// Durable Object namespace 的最小介面；避免依賴未安裝的 Cloudflare 型別套件。
+export type DurableObjectNamespaceLike = {
+  idFromName(name: string): unknown;
+  get(id: unknown): {
+    fetch(input: string | URL | Request, init?: RequestInit): Promise<Response>;
+  };
+};
 export type ApiBindings = {
   OPENROUTER_API_KEY?: string;
+  // 議題 #9：每小時費用上限（美元），未設定時採用 BUDGET.hourlyUsd。
+  HOURLY_BUDGET_USD?: string | number;
+  USAGE_BUDGET?: DurableObjectNamespaceLike;
   AI?: {
     run(
       model: string,

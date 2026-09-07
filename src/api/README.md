@@ -9,7 +9,8 @@
 3. `services/fact-check.ts`：完整流程、平行工作與部分失敗策略。
 4. `services/`：安全分類、候選搜尋、批次初篩、詳細證據、URL 背景、Gemma 綜整。
 5. `prompts/`、`schemas/`、`types/`：模型職責、輸入輸出契約與資料型別。
-6. `config.ts`：模型名稱、門檻、文字及時間限制。
+6. `config.ts`：模型名稱、門檻、文字及時間限制、每小時費用上限與牌價。
+7. `services/usage-budget.ts`、`utils/usage.ts`：Durable Object 記帳、費用估算與 token 用量紀錄。
 
 ## 已確認的 MVP 契約
 
@@ -84,6 +85,20 @@ Workers 的 `fetch` 不支援 `redirect: "error"`，使用時會在連線前拋�
 成功回應含 `X-Fact-Check-Cache: HIT/MISS/BYPASS` 與 `meta.cache.status`。命中另含 `cached_at`／`expires_at`，首頁逐項說明這些欄位；原始證據與分數不重新計算。Log 只新增 `event: "cache"`、request ID、操作（`read`／`write`／`schedule`）與狀態，不輸出 hash、原文、網址或 credential。`stored` 表示 Cache API 的寫入呼叫已完成，不保證平台一定保留到期。
 
 [Cloudflare Cache API](https://developers.cloudflare.com/workers/runtime-apis/cache/) 的內容不跨資料中心複寫，平台可能提早移除；Dashboard／Playground 預覽不保證可觀察命中。`tests/result-cache.test.ts` 覆蓋命中、過期、隔離、故障回退、背景寫入與同源限制；使用模擬儲存，不代表已部署驗收。
+
+## 每小時費用上限
+
+`services/usage-budget.ts` 實作 [議題 #9](https://github.com/g0v/fact-check-api/issues/9)。`cachedFactCheck()` 未命中快取後、呼叫任何模型前，向名為 `global` 的單一 `UsageBudget` Durable Object 送出 `reserve`；查核結束（含封鎖與失敗）後以 `settle` 修正為實際金額，並用 `waitUntil()` 承接。
+
+- 帳本以 UTC 整點小時為區間（`Math.floor(Date.now() / 3_600_000)`），跨小時自動歸零；`settle` 帶回預留時的區間，跨整點的差額不追溯也不抵扣新區間。
+- 上限由 `HOURLY_BUDGET_USD` 變數決定（字串或數字），無效或缺少時採用 `BUDGET.hourlyUsd`；上限為 0 時一律拒絕。上限由 Worker 傳給 Durable Object，物件本身只負責累加與判斷。
+- 預留金額由 `estimateRequestCostUsd()` 依輸入長度加上 `BUDGET.typicalTokens` 的典型候選與證據量估算；若改用最壞情況估算，在 0.01 美元的上限下幾乎每次都會被拒絕。
+- 各模型服務在上游回應後立即呼叫 `UsageRecorder`：優先讀取 `usage.prompt_tokens`／`completion_tokens` 或 `input_tokens`／`output_tokens`，缺少時以 `BUDGET.charsPerToken` 由送出訊息與整份回應長度估算並標記 `estimated`。逾時或傳輸失敗沒有回應時不記錄。
+- 金額依 `BUDGET.pricingUsdPerMillion` 牌價計算，不扣除 Workers AI 免費額度。`BUDGET` 不參與結果快取鍵，調整上限或牌價不會使快取失效。
+- Durable Object 使用 SQLite 儲存後端（Free 方案要求），`state.storage` 的 KV 介面仍可使用；程式不匯入 `cloudflare:workers`，binding 與 state 只用最小型別描述。
+- `reserve` 失敗或逾時（2 秒）時回 HTTP 503／`BUDGET_UNAVAILABLE`，寧可暫停查核也不放行未計費的模型呼叫；`settle` 失敗只記錄。沒有 `USAGE_BUDGET` binding（Node 單元測試）時略過控管。
+
+Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與金額）與 `event: "budget"`（操作、狀態、預留與累計金額、重設時間、本小時的通過與拒絕次數），不含原文、模型輸出或 credential。`tests/usage-budget.test.ts` 覆蓋帳本、Durable Object 指令、估算、流程整合與失敗策略；`tests/usage-budget-worker.test.ts` 在 workerd 以真實 Durable Object binding 驗證預留、結算與拒絕。
 
 ## 瀏覽器來源限制
 

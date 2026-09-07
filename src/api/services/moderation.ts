@@ -5,6 +5,7 @@ import type { ApiBindings, ModerationResult } from "../types/fact-check";
 import { upstreamError } from "../utils/errors";
 import { fetchJson, HttpError, type Fetcher } from "../utils/http";
 import type { Logger, LogValue } from "../utils/logging";
+import { measureUsage, type UsageRecorder } from "../utils/usage";
 import { array, record, string } from "../utils/validation";
 
 const moderationResponseSchema = {
@@ -83,6 +84,7 @@ export async function moderate(
   env: ApiBindings,
   fetcher: Fetcher = fetch,
   log: Logger = () => undefined,
+  usage: UsageRecorder = () => undefined,
 ): Promise<ModerationResult> {
   const start = Date.now();
   const diagnostics: Record<string, LogValue> = {
@@ -104,6 +106,10 @@ export async function moderate(
       api_key_configured: apiKeyConfigured,
     });
     if (!apiKeyConfigured) throw new Error(moderationErrorMessages[reason]);
+    const messages = [
+      { role: "system", content: communityPolicy },
+      { role: "user", content: JSON.stringify({ text }) },
+    ];
     log({
       ...diagnostics,
       event: "moderation_request",
@@ -124,10 +130,7 @@ export async function moderate(
         },
         body: JSON.stringify({
           model: MODELS.moderation,
-          messages: [
-            { role: "system", content: communityPolicy },
-            { role: "user", content: JSON.stringify({ text }) },
-          ],
+          messages,
           stream: false,
           temperature: 0,
           // 沿用 civic-talk-hono 實測參數；推理 token 也會計入 max_tokens。
@@ -149,6 +152,8 @@ export async function moderate(
         log({ ...diagnostics, event: "moderation_http_response", latency_ms: Date.now() - start });
       },
     );
+    // 只要上游已回應就計入用量，即使後續驗證失敗；金額由呼叫端結算。
+    usage(measureUsage("moderation", MODELS.moderation, output, JSON.stringify(messages)));
     reason = "invalid_completion";
     const response = record(output);
     Object.assign(diagnostics, completionMetadata(response));

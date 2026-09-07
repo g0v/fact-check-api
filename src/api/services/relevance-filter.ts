@@ -1,11 +1,12 @@
 import { LIMITS, MODELS } from "../config";
 import { relevancePrompt } from "../prompts/relevance-filter";
 import type { CofactsCandidate, RelevantCandidate, RelevanceResult } from "../types/cofacts";
-import type { ApiBindings } from "../types/fact-check";
+import type { ApiBindings, ModelMessage } from "../types/fact-check";
 import { upstreamError } from "../utils/errors";
 import { withTimeout } from "../utils/http";
 import type { Logger } from "../utils/logging";
 import { parseModelJson } from "../utils/model";
+import { measureUsage, type UsageRecorder } from "../utils/usage";
 import { array, record, string, unitNumber } from "../utils/validation";
 
 export async function filterRelevantCandidates(
@@ -13,6 +14,7 @@ export async function filterRelevantCandidates(
   candidates: CofactsCandidate[],
   env: ApiBindings,
   log: Logger = () => {},
+  usage: UsageRecorder = () => {},
 ): Promise<{ selected: RelevantCandidate[]; results: RelevanceResult[] }> {
   if (!candidates.length) return { selected: [], results: [] };
   try {
@@ -31,19 +33,20 @@ export async function filterRelevantCandidates(
       source_text_lengths: candidates.map((item) => item.text.length),
       sent_text_lengths: modelCandidates.map((item) => item.text.length),
     });
+    const messages: ModelMessage[] = [
+      { role: "system", content: relevancePrompt },
+      {
+        role: "user",
+        content: JSON.stringify({
+          claim: text,
+          candidates: modelCandidates,
+        }),
+      },
+    ];
     const output = await withTimeout(
       () =>
         ai.run(MODELS.relevance, {
-          messages: [
-            { role: "system", content: relevancePrompt },
-            {
-              role: "user",
-              content: JSON.stringify({
-                claim: text,
-                candidates: modelCandidates,
-              }),
-            },
-          ],
+          messages,
           stream: false,
           temperature: 0,
           max_tokens: 6_144,
@@ -51,6 +54,7 @@ export async function filterRelevantCandidates(
         }),
       LIMITS.modelTimeoutMs,
     );
+    usage(measureUsage("relevance", MODELS.relevance, output, JSON.stringify(messages)));
     const candidateMap = new Map(candidates.map((candidate) => [candidate.articleId, candidate]));
     const modelItems = array(record(parseModelJson(output)).results).map(record);
     // 在 ID 對應、門檻與排序之前紀錄模型數值；未知 ID 與非數值不原樣寫入 log。

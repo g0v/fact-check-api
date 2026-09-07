@@ -203,10 +203,22 @@ HTTP 200 時仍需檢查 `status`：
 | 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤 |
 | 403  | `FORBIDDEN_ORIGIN`     | POST 來源不符本站、未提供 Origin，或發送不支援的 OPTIONS 預檢 |
 | 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                              |
+| 429  | `BUDGET_EXCEEDED`      | 本小時模型費用已達上限；依 `Retry-After` 秒數於整點後重試     |
 | 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                |
+| 503  | `BUDGET_UNAVAILABLE`   | 用量控管的 Durable Object 暫時無法使用，稍後重試              |
 | 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                      |
 
 Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
+
+## 每小時費用上限
+
+為避免模型費用失控，服務以 Durable Object 集中記錄每個 UTC 整點小時的模型費用，預設上限為每小時 0.01 美元，可在 `wrangler.jsonc` 的 `vars.HOURLY_BUDGET_USD` 調整，不需改程式。
+
+- 只有未命中快取的查核才會消耗額度；快取命中、輸入驗證失敗與來源檢查失敗都不計費。
+- 每次查核先依輸入長度與典型候選、證據量預留估算費用，完成後以上游回報的 token 數與公告牌價結算實際金額；安全層封鎖或中途失敗時只計已呼叫的模型。
+- 預留後總額超過上限時回 HTTP 429／`BUDGET_EXCEEDED` 並附 `Retry-After`，不呼叫任何上游；額度於下個整點自動重設。
+- 金額依 OpenRouter 與 Workers AI 公告的每百萬 token 牌價計算，不扣除 Workers AI 每日免費 neurons，實際帳單可能較低。
+- 一次未命中快取的查核約 0.003～0.005 美元，最長輸入與大量證據時可能超過 0.01 美元；0.01 美元的上限大約每小時允許 2～3 次未命中快取的查核。
 
 ## 查核流程
 
@@ -255,7 +267,7 @@ src/
 ├── index.ts                 # 掛載 API、首頁與既有 SSR 路由
 ├── api/
 │   ├── index.ts             # middleware 與錯誤回應
-│   ├── config.ts            # 模型、門檻與資源限制
+│   ├── config.ts            # 模型、門檻、資源限制與每小時費用上限
 │   ├── routes/
 │   ├── middleware/          # POST 同源 Origin 檢查
 │   ├── services/            # 各查核階段與 orchestrator

@@ -292,9 +292,19 @@ const verdicts = [
                   <td>已宣告的請求本文過大，請縮短內容。</td>
                 </tr>
                 <tr>
+                  <th scope="row">429</th>
+                  <td><code>BUDGET_EXCEEDED</code></td>
+                  <td>本小時模型費用已達上限；依 Retry-After 秒數於整點後重試。</td>
+                </tr>
+                <tr>
                   <th scope="row">502</th>
                   <td><code>UPSTREAM_UNAVAILABLE</code></td>
                   <td>必要上游服務無法使用；依 stage 確認階段，稍後重試。</td>
+                </tr>
+                <tr>
+                  <th scope="row">503</th>
+                  <td><code>BUDGET_UNAVAILABLE</code></td>
+                  <td>用量控管服務暫時無法使用，稍後重試。</td>
                 </tr>
                 <tr>
                   <th scope="row">500</th>
