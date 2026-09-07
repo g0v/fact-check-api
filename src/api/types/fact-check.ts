@@ -107,6 +107,7 @@ export type ApiBindings = {
         max_tokens?: number;
         max_completion_tokens?: number;
         frequency_penalty?: number;
+        chat_template_kwargs?: { enable_thinking?: boolean; clear_thinking?: boolean };
         response_format: { type: "json_object" };
       },
     ): Promise<unknown>;

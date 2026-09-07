@@ -122,7 +122,7 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 Gemma 為唯一真假判斷階段。當 evidence 空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式以 `meta.no_relevant_evidence` 標記此狀態，並在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
 
-綜整呼叫帶 `frequency_penalty: 0.5`，抑制 temperature 0 下偶發的重複迴圈（曾實測燒滿 4,096 輸出 token 導致截斷）；此模型的 Workers AI schema 支援 `frequency_penalty`，不支援 `repetition_penalty`，參數效果仍需真實部署驗證。綜整失敗時輸出 `synthesis_error` 診斷事件，`reason` 為 `missing_binding`／`timeout`／`model_error`／`invalid_completion`／`incomplete_completion`／`invalid_content`／`invalid_content_json`／`invalid_synthesis`；chat completion 路徑另附白名單過濾後的 `finish_reason`（例如輸出達上限時為 `length`），gpt-oss 的 `response` 路徑沒有完成代碼，截斷只會以 `invalid_content_json` 呈現。診斷只含固定字串、完成代碼與延遲毫秒，不記錄模型內容或使用者原文；輸出 token 用量見同一 request ID 的 `usage` 事件。
+綜整呼叫依 Gemma 4 的 Workers AI 官方設定帶 `chat_template_kwargs: { enable_thinking: false }`，避免模型把輸出額度耗在 reasoning 後留下空的 `message.content`；另帶 `frequency_penalty: 0.5`，抑制 temperature 0 下偶發的重複迴圈（曾實測燒滿 4,096 輸出 token 導致截斷）。此模型的 Workers AI schema 支援兩項參數，不支援 `repetition_penalty`，參數效果仍需真實部署驗證。上游回應後先輸出 `synthesis_response`，只記錄 choice 數、白名單完成代碼、content 長度、有無 reasoning 與 token 用量，不記錄模型內容。綜整失敗時再輸出 `synthesis_error`，`reason` 為 `missing_binding`／`timeout`／`model_error`／`invalid_completion`／`incomplete_completion`／`invalid_content`／`invalid_content_json`／`invalid_synthesis`；chat completion 路徑另附白名單過濾後的 `finish_reason`（例如輸出達上限時為 `length`），gpt-oss 的 `response` 路徑沒有完成代碼，截斷只會以 `invalid_content_json` 呈現。診斷只含固定字串、完成代碼與延遲毫秒，不記錄模型內容或使用者原文；輸出 token 用量亦見同一 request ID 的 `usage` 事件。
 
 ## URL 抓取邊界
 

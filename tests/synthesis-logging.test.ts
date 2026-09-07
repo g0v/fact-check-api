@@ -28,8 +28,8 @@ function expectSynthesisError(h: ReturnType<typeof harness>, expected: Record<st
   );
 }
 
-describe("綜整診斷紀錄與重複迴圈抑制", () => {
-  it("綜整呼叫送出 frequency_penalty 與既有參數", async () => {
+describe("綜整診斷紀錄與推理迴圈抑制", () => {
+  it("綜整呼叫關閉 thinking 並送出重複抑制參數", async () => {
     const h = harness();
     await factCheck({ text: claim }, h.env, { ...h, requestId });
     const call = h.run.mock.calls.find(([model]) => model === MODELS.synthesis);
@@ -37,9 +37,56 @@ describe("綜整診斷紀錄與重複迴圈抑制", () => {
       temperature: 0,
       max_completion_tokens: 4096,
       frequency_penalty: 0.5,
+      chat_template_kwargs: { enable_thinking: false },
       response_format: { type: "json_object" },
     });
+    expect(h.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "synthesis_response",
+        stage: "synthesis",
+        model: MODELS.synthesis,
+        choices_count: 1,
+        finish_reason: "stop",
+        content_length: expect.any(Number),
+        has_reasoning: false,
+      }),
+    );
     expect(h.log).not.toHaveBeenCalledWith(expect.objectContaining({ event: "synthesis_error" }));
+  });
+
+  it("content 為 null 但含 reasoning 時只記錄安全 metadata", async () => {
+    const h = harness();
+    overrideSynthesis(h, {
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { content: null, reasoning_content: "不可寫入 log 的模型推理" },
+        },
+      ],
+      usage: {
+        prompt_tokens: 1069,
+        completion_tokens: 2775,
+        completion_tokens_details: { reasoning_tokens: 2775 },
+      },
+    });
+    await expect(factCheck({ text: claim }, h.env, { ...h, requestId })).rejects.toMatchObject({
+      status: 502,
+      stage: "synthesis",
+    });
+    expect(h.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "synthesis_response",
+        choices_count: 1,
+        finish_reason: "stop",
+        content_length: null,
+        has_reasoning: true,
+        prompt_tokens: 1069,
+        completion_tokens: 2775,
+        reasoning_tokens: 2775,
+      }),
+    );
+    expectSynthesisError(h, { reason: "invalid_content", finish_reason: "stop" });
+    expect(JSON.stringify(h.log.mock.calls)).not.toContain("不可寫入 log 的模型推理");
   });
 
   it("輸出達 token 上限（finish_reason: length）記錄 incomplete_completion", async () => {
