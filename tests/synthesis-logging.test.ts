@@ -36,7 +36,7 @@ describe("綜整診斷紀錄與推理迴圈抑制", () => {
     expect(call?.[1]).toMatchObject({
       temperature: 0,
       max_completion_tokens: 4096,
-      frequency_penalty: 0.5,
+      // frequency_penalty: 0.5,
       chat_template_kwargs: { enable_thinking: false },
       response_format: { type: "json_object" },
     });

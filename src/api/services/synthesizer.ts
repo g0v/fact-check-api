@@ -111,7 +111,7 @@ export async function synthesize(
           max_completion_tokens: 4_096,
           // temperature 0 曾出現重複迴圈燒滿輸出上限；此模型不支援 repetition_penalty，
           // 改以 frequency penalty 抑制。取值需低到不懲罰 JSON 的合法重複 token。
-          frequency_penalty: 0.5,
+          // frequency_penalty: 0.5,
           // Gemma 4 是推理模型；關閉 thinking，避免 token 全耗在 reasoning 而 content 為 null。
           chat_template_kwargs: { enable_thinking: false },
           response_format: { type: "json_object" },
