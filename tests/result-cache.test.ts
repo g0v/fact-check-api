@@ -111,7 +111,7 @@ describe("查核結果快取", () => {
     expect(h.run).toHaveBeenCalledTimes(4);
   });
 
-  it.each([{ decision: "block" }, { urlFailure: true }])(
+  it.each([{ decision: "block" }, { urlFailure: true }, { safetyFailure: true }])(
     "封鎖與部分失敗不寫入快取：%j",
     async (options) => {
       const h = harness(options);
@@ -130,7 +130,7 @@ describe("查核結果快取", () => {
   );
 
   it("上游失敗不寫入；無證據的常識判斷結果仍可快取且保留下修後的 confidence", async () => {
-    const failed = harness({ safetyFailure: true });
+    const failed = harness({ synthesisFailure: true });
     const { cache } = memoryCache();
     await expect(
       cachedFactCheck(input, failed.env, { ...failed, cache, origin }),

@@ -76,13 +76,19 @@ describe("Safeguard 呼叫契約", () => {
       output: { choices: [{ finish_reason: "stop", message: { content: "{" } }] },
     },
     { name: "無效安全分類", output: completion({ ...allowed, decision: "pass" }) },
-  ])("$name 時回 502 並停止下游", async ({ output }) => {
+  ])("$name 時跳過安全分類並以 partial 繼續查核", async ({ output }) => {
     const h = harness();
     h.fetcher.mockResolvedValueOnce(Response.json(output));
-    await expect(
-      factCheck({ text: claim, url: "https://example.com" }, h.env, h),
-    ).rejects.toMatchObject({ status: 502, stage: "moderation" });
-    expect(h.fetcher).toHaveBeenCalledOnce();
-    expect(h.run).not.toHaveBeenCalled();
+    const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
+    expect(result.status).toBe("partial");
+    expect(result.moderation).toMatchObject({ decision: "skipped", categories: [] });
+    expect(result.meta.warnings).toContainEqual({
+      stage: "moderation",
+      code: "UPSTREAM_UNAVAILABLE",
+    });
+    expect(
+      h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
+    ).toHaveLength(1);
+    expect(h.run).toHaveBeenCalledTimes(2);
   });
 });

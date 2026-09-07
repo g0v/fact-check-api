@@ -6,12 +6,20 @@ export class ApiError extends Error {
     message: string,
     public readonly status: 400 | 403 | 413 | 500 | 502,
     public readonly stage?: UpstreamStage,
+    // 部署設定錯誤（如缺少金鑰）不可視為暫時性上游不穩定而跳過。
+    public readonly configError = false,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-export function upstreamError(stage: UpstreamStage): ApiError {
-  return new ApiError("UPSTREAM_UNAVAILABLE", "查核上游服務暫時無法使用，請稍後再試。", 502, stage);
+export function upstreamError(stage: UpstreamStage, configError = false): ApiError {
+  return new ApiError(
+    "UPSTREAM_UNAVAILABLE",
+    "查核上游服務暫時無法使用，請稍後再試。",
+    502,
+    stage,
+    configError,
+  );
 }

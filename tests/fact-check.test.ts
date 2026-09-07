@@ -88,17 +88,37 @@ describe("完整查核流程（模擬外部傳輸）", () => {
   });
 
   it.each([{ safetyFailure: true }, { moderation: { decision: "allow" } }])(
-    "安全層失敗不放行：%j",
+    "安全層失敗時跳過安全分類並繼續查核：%j",
     async (options) => {
       const h = harness(options);
-      await expect(factCheck({ text: claim }, h.env, h)).rejects.toMatchObject({
-        status: 502,
+      const result = await factCheck({ text: claim }, h.env, h);
+      expect(result.status).toBe("partial");
+      expect(result.moderation).toMatchObject({ decision: "skipped", categories: [] });
+      expect(result.meta.warnings).toContainEqual({
         stage: "moderation",
+        code: "UPSTREAM_UNAVAILABLE",
       });
-      expect(h.fetcher).toHaveBeenCalledTimes(1);
-      expect(h.run).not.toHaveBeenCalled();
+      expect(result.related_checks.map((item) => item.type)).toEqual([
+        "cofacts_human",
+        "cofacts_ai",
+      ]);
+      expect(
+        h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
+      ).toHaveLength(1);
+      expect(h.run).toHaveBeenCalledTimes(2);
     },
   );
+
+  it("缺少金鑰是設定錯誤，不跳過安全層，仍回 502", async () => {
+    const h = harness();
+    h.env.OPENROUTER_API_KEY = undefined;
+    await expect(factCheck({ text: claim }, h.env, h)).rejects.toMatchObject({
+      status: 502,
+      stage: "moderation",
+    });
+    expect(h.fetcher).not.toHaveBeenCalled();
+    expect(h.run).not.toHaveBeenCalled();
+  });
 
   it.each([false, true])("無相關證據是正常結果（候選為空：%s）", async (emptySearch) => {
     const h = harness({
