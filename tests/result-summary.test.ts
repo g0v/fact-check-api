@@ -119,6 +119,7 @@ describe("查核結果摘要組裝", () => {
 describe("結果欄摘要版面（SSR，不使用瀏覽器自動化）", () => {
   it("依序呈現判斷結果、評估文字、查核說明、來源，安全分類與流程資訊殿後", async () => {
     const html = await render(responseData);
+    expect(html).toMatch(/<button[^>]*class="download-markdown"[^>]*>.*下載 Markdown.*<\/button>/s);
     const order = [
       "證據大致支持",
       "mostly_supported",

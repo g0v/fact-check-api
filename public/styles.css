@@ -644,6 +644,32 @@ p.form-error {
 .result-summary {
   margin-top: 1.2rem;
 }
+.result-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.download-markdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.55rem 0.8rem;
+  color: var(--accent);
+  background: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.download-markdown:hover {
+  color: #fff;
+  background: var(--accent);
+}
 .result-summary h4,
 .result-rest h4 {
   margin: 1.6rem 0 0.4rem;
@@ -741,6 +767,14 @@ p.form-error {
   }
 }
 @media (max-width: 760px) {
+  .result-summary-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .download-markdown {
+    justify-content: center;
+    align-self: flex-start;
+  }
   .try-section {
     padding: 1.2rem;
     margin: 1.5rem 0;

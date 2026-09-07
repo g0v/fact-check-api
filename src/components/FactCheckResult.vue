@@ -2,10 +2,12 @@
 import { computed } from "vue";
 import FactCheckValue from "./FactCheckValue.vue";
 import { safeSourceLink, valueLabel } from "../client/fact-check-fields";
+import { downloadFactCheckMarkdown } from "../client/fact-check-markdown";
 import { summarizeFactCheck } from "../client/fact-check-summary";
 
 const props = defineProps<{ data: unknown }>();
 const summary = computed(() => summarizeFactCheck(props.data));
+const downloadMarkdown = () => downloadFactCheckMarkdown(props.data);
 
 type SourceView = {
   typeText: string;
@@ -45,10 +47,15 @@ const sources = computed<SourceView[]>(() =>
 <template>
   <template v-if="summary">
     <section class="result-summary" aria-label="查核結果摘要">
-      <p class="verdict-line">
-        <strong class="verdict-text">{{ summary.verdictText }}</strong>
-        <code class="verdict-code">{{ summary.verdict }}</code>
-      </p>
+      <div class="result-summary-heading">
+        <p class="verdict-line">
+          <strong class="verdict-text">{{ summary.verdictText }}</strong>
+          <code class="verdict-code">{{ summary.verdict }}</code>
+        </p>
+        <button class="download-markdown" type="button" @click="downloadMarkdown">
+          <span aria-hidden="true">↓</span> 下載 Markdown
+        </button>
+      </div>
       <p v-if="summary.assessment" class="assessment-line">{{ summary.assessment }}</p>
       <p
         v-if="summary.factuality !== null || summary.confidence !== null"
