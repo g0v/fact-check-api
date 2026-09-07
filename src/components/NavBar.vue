@@ -16,7 +16,7 @@ defineProps<{ current?: string }>();
         href="/about"
         :class="{ active: current === 'about' }"
         :aria-current="current === 'about' ? 'page' : undefined"
-        >關於樣板</a
+        >關於本站</a
       >
       <a href="https://github.com/g0v/fact-check-api">GitHub <span aria-hidden="true">↗</span></a>
     </div>
