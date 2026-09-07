@@ -146,6 +146,21 @@ describe("查核結果快取", () => {
     expect(hit.meta.no_relevant_evidence).toBe(true);
   });
 
+  it("白名單機構網址證據可快取，命中後保留未下修信心值", async () => {
+    const h = harness({ edges: [] });
+    const { cache } = memoryCache();
+    const allowlistedInput = { ...input, url: "https://data.gov.tw/report" };
+    const first = await cachedFactCheck(allowlistedInput, h.env, { ...h, cache, origin });
+    const hit = await cachedFactCheck(allowlistedInput, h.env, { ...h, cache, origin });
+    expect(first.meta.no_relevant_evidence).toBe(false);
+    expect(first.meta.url_context_allowlisted).toBe(true);
+    expect(hit.meta.cache?.status).toBe("hit");
+    expect(hit.meta.no_relevant_evidence).toBe(false);
+    expect(hit.meta.url_context_allowlisted).toBe(true);
+    expect(hit.confidence).toBe(0.6);
+    expect(h.run).toHaveBeenCalledOnce();
+  });
+
   it.each(["read", "write", "schedule"])(
     "快取 %s 失敗仍回正常結果且不洩漏例外內容",
     async (operation) => {

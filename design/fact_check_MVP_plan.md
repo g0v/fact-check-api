@@ -911,7 +911,7 @@ type Evidence = {
   positiveFeedback?: number;
   negativeFeedback?: number;
 
-  reliability: "human-community" | "ai-generated" | "user-provided";
+  reliability: "human-community" | "ai-generated" | "user-provided" | "allowlisted-institution";
 };
 ```
 
@@ -989,8 +989,9 @@ HTML extraction
 provided-url evidence
 ```
 
-- [ ] URL 不作為「可信來源」自動採信
-- [ ] 只是使用者提供的 context
+- [ ] 一般 URL 不作為「可信來源」自動採信，只是使用者提供的 context
+- [ ] 最終網址為 `gov.tw`／`edu.tw` 或其子網域時，標為白名單機構參考證據
+- [ ] 白名單只確認網域歸屬，不保證內容正確
 
 ---
 

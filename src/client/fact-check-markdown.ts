@@ -120,6 +120,7 @@ export function createFactCheckMarkdown(value: unknown): string | null {
     ["cofacts_human_checks", "人工查核數"],
     ["cofacts_ai_checks", "AI 回覆數"],
     ["url_context_used", "是否使用網址背景"],
+    ["url_context_allowlisted", "網址是否為白名單機構"],
     ["no_relevant_evidence", "是否查無相關證據"],
   ];
   for (const [key, label] of metaFields) {

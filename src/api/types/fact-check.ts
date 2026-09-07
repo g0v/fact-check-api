@@ -38,7 +38,7 @@ export type Evidence = {
   relevanceScore?: number;
   positiveFeedback?: number;
   negativeFeedback?: number;
-  reliability: "human-community" | "ai-generated" | "user-provided";
+  reliability: "human-community" | "ai-generated" | "user-provided" | "allowlisted-institution";
 };
 
 export type UpstreamStage =
@@ -74,6 +74,7 @@ export type FactCheckResponse = FactCheckInput & {
     cofacts_human_checks: number;
     cofacts_ai_checks: number;
     url_context_used: boolean;
+    url_context_allowlisted: boolean;
     no_relevant_evidence: boolean;
     warnings: Warning[];
     cache?: {

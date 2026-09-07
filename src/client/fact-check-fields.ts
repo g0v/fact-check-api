@@ -87,12 +87,17 @@ const fields: Record<string, FieldInfo> = {
   "meta.url_context_used": {
     label: "是否使用網址背景",
     description:
-      "true：已抓取提供網址的文字作為背景；內容由使用者提供、未經查證，僅在有 Cofacts 證據時以最低優先序送入綜整模型。false：沒有使用。",
+      "true：已成功抓取提供網址的文字；是否可在無 Cofacts 證據時採用，另見網址白名單欄位。false：沒有成功取得網址內容。",
+  },
+  "meta.url_context_allowlisted": {
+    label: "網址是否為白名單機構",
+    description:
+      "true：重新導向後的最終網址屬於 gov.tw／edu.tw 或其子網域，查無 Cofacts 資料時仍可作為機構參考證據；白名單不保證內容正確。false：不在白名單。",
   },
   "meta.no_relevant_evidence": {
     label: "是否查無相關證據",
     description:
-      "true：查無相關 Cofacts 查核資料（含只提供網址、沒有任何查核回覆的情況），判斷為模型常識推估，confidence 已下修至最高 0.5；false：有採用 Cofacts 查核證據。",
+      "true：既無 Cofacts 查核資料，也無 gov.tw／edu.tw 白名單網址證據，判斷為模型常識推估，confidence 已下修至最高 0.5；false：至少採用一項 Cofacts 或白名單機構證據。",
   },
   "meta.cache": {
     label: "Worker 快取",

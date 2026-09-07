@@ -122,13 +122,13 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 Gemma 為唯一真假判斷階段。當送入模型的 evidence 為空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
 
-有 `cofacts-human`／`cofacts-ai` 證據時，使用者提供的 `provided-url` 證據會一併送入綜整模型，但僅作為背景：prompt 標記其為使用者提供、未經獨立驗證、優先序最低；若與其他證據衝突，依來源權威性、引用品質與時效比較，不可只按 source 標籤裁決，也不得僅憑使用者網址支持 claim，也不進 `related_checks`。只有使用者提供的網址而無任何 Cofacts 證據時，綜整前會排除 `provided-url` 證據（送入空陣列），讓空證據的常識判斷契約生效。`meta.no_relevant_evidence` 以 Cofacts 證據計算，url-only 時同樣為 `true`。
+有 `cofacts-human`／`cofacts-ai` 證據時，使用者提供的 `provided-url` 證據會一併送入綜整模型，但一般網址僅作為背景：prompt 標記其為使用者提供、未經獨立驗證、優先序最低；若與其他證據衝突，依來源權威性、引用品質與時效比較，不可只按 source 或 reliability 標籤裁決，也不得僅憑一般使用者網址支持 claim。重新導向後的最終網址若為 `gov.tw`、`edu.tw` 或其子網域，則標記為 `allowlisted-institution`，在沒有 Cofacts 證據時仍可單獨送入模型作為機構參考資料；網域白名單不保證內文正確，模型仍須核對發布機關、適用範圍與時效。網址證據不進 `related_checks`；`meta.url_context_allowlisted` 回報最終網址是否在白名單，`meta.no_relevant_evidence` 只在 Cofacts 與白名單網址證據皆不存在時為 `true`。
 
 綜整呼叫依 Gemma 4 的 Workers AI 官方設定帶 `chat_template_kwargs: { enable_thinking: false }`，避免模型把輸出額度耗在 reasoning 後留下空的 `message.content`。此模型的 Workers AI schema 支援兩項參數，不支援 `repetition_penalty`，參數效果仍需真實部署驗證。上游回應後先輸出 `synthesis_response`，只記錄 choice 數、白名單完成代碼、content 長度、有無 reasoning 與 token 用量，不記錄模型內容。綜整失敗時再輸出 `synthesis_error`，`reason` 為 `missing_binding`／`timeout`／`model_error`／`invalid_completion`／`incomplete_completion`／`invalid_content`／`invalid_content_json`／`invalid_synthesis`；chat completion 路徑另附白名單過濾後的 `finish_reason`（例如輸出達上限時為 `length`），gpt-oss 的 `response` 路徑沒有完成代碼，截斷只會以 `invalid_content_json` 呈現。診斷只含固定字串、完成代碼與延遲毫秒，不記錄模型內容或使用者原文；輸出 token 用量亦見同一 request ID 的 `usage` 事件。
 
 ## URL 抓取邊界
 
-HTML 使用 Workers 原生 `HTMLRewriter` 移除腳本、樣式、樣板等內容，再解碼 HTML entities、擷取最多 12,000 個 UTF-16 code unit。網站需要 JavaScript 才產生的內容不會被執行。來源只標為 `user-provided`，不自動視為可信；抓取成功且有 Cofacts 證據時作為最低優先序的背景送入綜整模型，查無 Cofacts 證據時不送入模型（見「證據契約」）。
+HTML 使用 Workers 原生 `HTMLRewriter` 移除腳本、樣式、樣板等內容，再解碼 HTML entities、擷取最多 12,000 個 UTF-16 code unit。網站需要 JavaScript 才產生的內容不會被執行。一般來源標為 `user-provided`，不自動視為可信；抓取成功且有 Cofacts 證據時作為最低優先序的背景送入綜整模型，查無 Cofacts 證據時不送入模型。只有最終 hostname 完全等於 `gov.tw`／`edu.tw`，或以 `.` 分隔的子網域，才標為 `allowlisted-institution` 並允許在 Cofacts 無證據時使用；`fakegov.tw`、`gov.tw.example.com` 等相似名稱不會通過（見「證據契約」）。
 
 DNS 預檢與 Workers `fetch()` 是兩次解析，無法在一般 Worker fetch 中釘選任意目標 IP；DNS rebinding 的最終隔離依賴 Cloudflare 執行環境。此 fetcher 不能直接移到可存取私網的 Node 伺服器；若要部署於該環境，需改用能固定連線 IP 的出口代理。模型 binding timeout 會停止等待，但 Workers AI API 沒有在本介面提供取消推論的方法，已送出的推論仍可能計費。
 

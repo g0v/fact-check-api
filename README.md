@@ -133,6 +133,7 @@ URL 提供查核背景，未經獨立驗證且優先序最低：抓取成功且�
     "cofacts_human_checks": 0,
     "cofacts_ai_checks": 0,
     "url_context_used": false,
+    "url_context_allowlisted": false,
     "no_relevant_evidence": true,
     "warnings": []
   }
@@ -235,7 +236,7 @@ Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼�
 | 詳細證據 | Cofacts `GetArticle`                       | 只取相關文章的人工／AI 查核與來源，分開保存              |
 | 證據綜整 | Workers AI `@cf/google/gemma-4-26b-a4b-it` | 依據證據產生 factuality、confidence、verdict 與 feedback |
 
-初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；完全沒有證據、或只有使用者提供的網址而無任何 Cofacts 人工／AI 查核時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷（網址文字不作為查核證據），程式以 `meta.no_relevant_evidence` 標記此狀態，並把 `confidence` 下修至最高 0.5，常識也無法判斷時才回 `insufficient_evidence`。
+初篩門檻為 `relevant: true` 且 `relevance >= 0.65`，仍須以實測 dataset 校準。沒有相關 Cofacts 資料不是錯誤；若提供網址重新導向後的最終網域是 `gov.tw`、`edu.tw` 或其子網域，內容會標記為 `allowlisted-institution`，可單獨作為機構參考證據，但白名單不代表內容必然正確。其他網址在沒有 Cofacts 人工／AI 查核時不會送入 Gemma；完全沒有可用證據時，Gemma 在同一輪 prompt 改用一般常識給出有意義的判斷，程式以 `meta.no_relevant_evidence` 標記此狀態，並把 `confidence` 下修至最高 0.5，常識也無法判斷時才回 `insufficient_evidence`。`meta.url_context_allowlisted` 會明確回報本次抓取的最終網址是否通過機構網域白名單。
 
 ## 開發與驗證
 

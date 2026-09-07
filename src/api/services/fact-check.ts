@@ -46,6 +46,7 @@ export async function factCheck(
     cofacts_human_checks: 0,
     cofacts_ai_checks: 0,
     url_context_used: false,
+    url_context_allowlisted: false,
     no_relevant_evidence: false,
     warnings,
   };
@@ -99,6 +100,7 @@ export async function factCheck(
   const urlContext = urlResult.status === "fulfilled" ? urlResult.value : null;
   if (urlResult.status === "rejected") warn("url");
   meta.url_context_used = Boolean(urlContext);
+  meta.url_context_allowlisted = urlContext?.reliability === "allowlisted-institution";
   let candidates: CofactsCandidate[] = [];
   if (searchResult.status === "fulfilled") candidates = searchResult.value;
   else throw upstreamError("cofacts-search");
@@ -149,15 +151,17 @@ export async function factCheck(
     (item) => item.source === "cofacts-human",
   ).length;
   meta.cofacts_ai_checks = details.evidence.filter((item) => item.source === "cofacts-ai").length;
-  // Issue #10：查無相關 Cofacts 查核資料（含只有使用者網址的情境）時標記狀態，
-  // 交 Gemma 常識判斷並下修 confidence。
-  meta.no_relevant_evidence = details.evidence.length === 0;
+  // Issue #10、#24：一般 url-only 仍走常識判斷；gov.tw／edu.tw 白名單網址
+  // 可在 Cofacts 無資料時作為參考證據。
+  meta.no_relevant_evidence =
+    details.evidence.length === 0 && urlContext?.reliability !== "allowlisted-institution";
   log({
     event: "evidence",
     request_id: requestId,
     human_count: meta.cofacts_human_checks,
     ai_count: meta.cofacts_ai_checks,
     has_url_context: Boolean(urlContext),
+    url_context_allowlisted: meta.url_context_allowlisted,
     no_relevant_evidence: meta.no_relevant_evidence,
   });
   const result = await stage("synthesis", () =>

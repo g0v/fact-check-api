@@ -35,7 +35,7 @@ export function parseModeration(value: unknown): ModerationResult {
   };
 }
 
-export function parseSynthesis(value: unknown, hasIndependentEvidence: boolean): SynthesisResult {
+export function parseSynthesis(value: unknown, hasUsableEvidence: boolean): SynthesisResult {
   const data = record(value);
   const result: SynthesisResult = {
     verdict: enumValue(data.verdict, verdicts),
@@ -43,9 +43,9 @@ export function parseSynthesis(value: unknown, hasIndependentEvidence: boolean):
     confidence: unitNumber(data.confidence),
     feedback: string(data.feedback, 6_000),
   };
-  // 沒有可獨立查核的證據（無 Cofacts 人工／AI 回覆）時是常識判斷，
+  // 沒有可用證據（無 Cofacts 人工／AI 回覆，也無白名單機構網址）時是常識判斷，
   // confidence 上限為 0.5；超過就由程式下修，不整筆丟棄。
-  // 只有使用者提供網址的情境也算常識判斷，網址文字不作為查核證據。
-  if (!hasIndependentEvidence && result.confidence > 0.5) result.confidence = 0.5;
+  // 只有一般使用者網址的情境也算常識判斷，網址文字不作為查核證據。
+  if (!hasUsableEvidence && result.confidence > 0.5) result.confidence = 0.5;
   return result;
 }

@@ -5,6 +5,15 @@ import { upstreamError } from "../utils/errors";
 import { readLimitedText, withTimeout, type Fetcher } from "../utils/http";
 import { assertPublicDns, validatePublicUrl } from "../utils/url";
 
+const ALLOWLISTED_INSTITUTION_DOMAINS = ["gov.tw", "edu.tw"] as const;
+
+export function isAllowlistedInstitutionUrl(url: URL): boolean {
+  const hostname = url.hostname.replace(/\.$/, "").toLowerCase();
+  return ALLOWLISTED_INSTITUTION_DOMAINS.some(
+    (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+  );
+}
+
 // 僅宣告本模組使用的 Workers 內建介面，實際解析由 workerd 的 HTMLRewriter 執行。
 declare const HTMLRewriter: {
   new (): {
@@ -100,7 +109,9 @@ export async function fetchUrlContext(value: string, fetcher: Fetcher = fetch): 
         if (!text) throw new Error("網址沒有可供查核的文字。");
         return {
           source: "provided-url",
-          reliability: "user-provided",
+          reliability: isAllowlistedInstitutionUrl(url)
+            ? "allowlisted-institution"
+            : "user-provided",
           evidenceText: text,
           sourceUrl: url.href,
         };

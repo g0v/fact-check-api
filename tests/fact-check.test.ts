@@ -187,6 +187,7 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     expect(result.status).toBe("completed");
     expect(result.meta.no_relevant_evidence).toBe(true);
     expect(result.meta.url_context_used).toBe(true);
+    expect(result.meta.url_context_allowlisted).toBe(false);
     expect(result.meta.cofacts_human_checks).toBe(0);
     expect(result.meta.cofacts_ai_checks).toBe(0);
     expect(result.related_checks).toEqual([]);
@@ -196,6 +197,40 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     expect(h.run.mock.calls.at(-1)![1].messages[0].content).toContain("常識");
     expect(result.confidence).toBeLessThanOrEqual(0.5);
   });
+
+  it.each(["https://gov.tw/report", "https://school.edu.tw/report", "https://www.nccu.edu.tw/"])(
+    "Cofacts 無證據時採用白名單機構網址：%s",
+    async (url) => {
+      const h = harness({ edges: [] });
+      const result = await factCheck({ text: claim, url }, h.env, h);
+      expect(result.status).toBe("completed");
+      expect(result.meta.no_relevant_evidence).toBe(false);
+      expect(result.meta.url_context_used).toBe(true);
+      expect(result.meta.url_context_allowlisted).toBe(true);
+      expect(result.related_checks).toEqual([]);
+      const payload = JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content);
+      expect(payload.evidence).toEqual([
+        expect.objectContaining({
+          source: "provided-url",
+          reliability: "allowlisted-institution",
+          sourceUrl: url,
+        }),
+      ]);
+      expect(result.confidence).toBe(0.6);
+    },
+  );
+
+  it.each(["https://fakegov.tw", "https://gov.tw.example.com"])(
+    "相似但不在白名單的網址仍不能單獨作為證據：%s",
+    async (url) => {
+      const h = harness({ edges: [] });
+      const result = await factCheck({ text: claim, url }, h.env, h);
+      expect(result.meta.no_relevant_evidence).toBe(true);
+      expect(result.meta.url_context_allowlisted).toBe(false);
+      expect(JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content).evidence).toEqual([]);
+      expect(result.confidence).toBe(0.5);
+    },
+  );
 
   it("cofacts 與 URL 混合時 provided-url 仍正常進入 evidence", async () => {
     const h = harness();

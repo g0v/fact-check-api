@@ -1,12 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { LIMITS } from "../src/api/config";
-import { fetchUrlContext } from "../src/api/services/url-context";
+import { fetchUrlContext, isAllowlistedInstitutionUrl } from "../src/api/services/url-context";
 import { readLimitedText, withTimeout, type Fetcher } from "../src/api/utils/http";
 import { isPublicIp, validatePublicUrl } from "../src/api/utils/url";
 
 afterEach(() => vi.useRealTimers());
 
 describe("URL SSRF 與資源限制", () => {
+  it.each([
+    ["https://gov.tw", true],
+    ["https://www.gov.tw/path", true],
+    ["https://edu.tw", true],
+    ["https://school.edu.tw", true],
+    ["https://www.nccu.edu.tw/", true],
+    ["https://fakegov.tw", false],
+    ["https://gov.tw.example.com", false],
+    ["https://edu.tw.evil.example", false],
+  ])("機構網址白名單安全比對 %s：%s", (value, expected) => {
+    expect(isAllowlistedInstitutionUrl(new URL(value))).toBe(expected);
+  });
+
   it.each([
     "http://localhost",
     "http://localhost.",
@@ -160,6 +173,37 @@ describe("URL SSRF 與資源限制", () => {
     expect(init?.redirect).toBe("manual");
     expect(new Headers(init?.headers).has("Authorization")).toBe(false);
     expect(new Headers(init?.headers).has("Cookie")).toBe(false);
+  });
+
+  it.each(["https://gov.tw", "https://school.edu.tw", "https://www.nccu.edu.tw/"])(
+    "白名單機構網址標記為可用參考證據：%s",
+    async (url) => {
+      expect(await fetchUrlContext(url, urlFetcher())).toMatchObject({
+        source: "provided-url",
+        reliability: "allowlisted-institution",
+      });
+    },
+  );
+
+  it.each([
+    ["https://gov.tw", "https://example.com", "user-provided"],
+    ["https://example.com", "https://agency.gov.tw", "allowlisted-institution"],
+  ])("依重新導向後的最終網址判定白名單：%s → %s", async (start, target, reliability) => {
+    const fetcher = vi.fn<Fetcher>(async (input) => {
+      const url = new URL(String(input));
+      if (url.hostname === "cloudflare-dns.com")
+        return Response.json({
+          Status: 0,
+          Answer: url.searchParams.get("type") === "A" ? [{ type: 1, data: "93.184.215.14" }] : [],
+        });
+      if (url.href === new URL(start).href)
+        return new Response(null, { status: 302, headers: { location: target } });
+      return new Response("重新導向後內容", { headers: { "Content-Type": "text/plain" } });
+    });
+    expect(await fetchUrlContext(start, fetcher)).toMatchObject({
+      reliability,
+      sourceUrl: new URL(target).href,
+    });
   });
 
   it("串流超過限制時取消讀取", async () => {

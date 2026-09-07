@@ -37,6 +37,7 @@ const responseExample = JSON.stringify(
       cofacts_human_checks: 0,
       cofacts_ai_checks: 0,
       url_context_used: false,
+      url_context_allowlisted: false,
       no_relevant_evidence: true,
       warnings: [],
     },
@@ -172,14 +173,14 @@ const verdicts = [
             bytes。沒有網址時請省略 <code>url</code>，不要傳空字串或 <code>null</code>。
           </p>
           <div class="callout">
-            <strong>網址提供查核背景，未經獨立驗證，優先順序最低。</strong>
+            <strong>政府與教育機構網址可作參考，其他網址只提供背景。</strong>
             <p>
               支援 HTML 與純文字頁面，不執行網頁 JavaScript。網址抓取失敗時，Cofacts
-              查核仍會繼續，並在回應保留警告。網址內容由使用者提供：有 Cofacts
-              查核證據時，僅作為優先序最低的背景送入綜整模型；若與其他證據衝突，依來源權威性、
-              引用品質與時效比較，不可只按 source 標籤裁決，也不得僅憑使用者網址支持
-              claim；若查無相關 Cofacts
-              查核資料，網址不會作為證據，判斷將改以模型常識推估，信心值上限 0.5。
+              查核仍會繼續，並在回應保留警告。重新導向後的最終網址若屬於
+              <code>gov.tw</code>、<code>edu.tw</code> 或其子網域，查無 Cofacts
+              資料時仍可作為機構參考證據；網域白名單不保證內容正確，仍需核對發布機關、適用範圍與時效。
+              其他網址只有在取得 Cofacts 證據時，才會以最低優先序作為背景；否則改以模型常識推估，
+              信心值上限 0.5。
             </p>
           </div>
         </section>
