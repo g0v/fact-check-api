@@ -106,6 +106,7 @@ export type ApiBindings = {
         temperature: number;
         max_tokens?: number;
         max_completion_tokens?: number;
+        frequency_penalty?: number;
         response_format: { type: "json_object" };
       },
     ): Promise<unknown>;
