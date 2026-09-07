@@ -6,11 +6,16 @@ import { readLimitedText, withTimeout, type Fetcher } from "../utils/http";
 import { assertPublicDns, validatePublicUrl } from "../utils/url";
 
 const ALLOWLISTED_INSTITUTION_DOMAINS = ["gov.tw", "edu.tw"] as const;
+const ALLOWLISTED_INSTITUTION_HTTPS_HOSTS = ["tfc-taiwan.org.tw"] as const;
 
 export function isAllowlistedInstitutionUrl(url: URL): boolean {
   const hostname = url.hostname.replace(/\.$/, "").toLowerCase();
-  return ALLOWLISTED_INSTITUTION_DOMAINS.some(
-    (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+  return (
+    ALLOWLISTED_INSTITUTION_DOMAINS.some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+    ) ||
+    (url.protocol === "https:" &&
+      ALLOWLISTED_INSTITUTION_HTTPS_HOSTS.some((host) => hostname === host))
   );
 }
 

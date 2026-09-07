@@ -92,12 +92,12 @@ const fields: Record<string, FieldInfo> = {
   "meta.url_context_allowlisted": {
     label: "網址是否為白名單機構",
     description:
-      "true：重新導向後的最終網址屬於 gov.tw／edu.tw 或其子網域，查無 Cofacts 資料時仍可作為機構參考證據；白名單不保證內容正確。false：不在白名單。",
+      "true：重新導向後的最終網址屬於 gov.tw／edu.tw 或其子網域，或為 https://tfc-taiwan.org.tw 開頭的網址，查無 Cofacts 資料時仍可作為機構參考證據；白名單不保證內容正確。false：不在白名單。",
   },
   "meta.no_relevant_evidence": {
     label: "是否查無相關證據",
     description:
-      "true：既無 Cofacts 查核資料，也無 gov.tw／edu.tw 白名單網址證據，判斷為模型常識推估，confidence 已下修至最高 0.5；false：至少採用一項 Cofacts 或白名單機構證據。",
+      "true：既無 Cofacts 查核資料，也無白名單網址證據，判斷為模型常識推估，confidence 已下修至最高 0.5；false：至少採用一項 Cofacts 或白名單機構證據。",
   },
   "meta.cache": {
     label: "Worker 快取",

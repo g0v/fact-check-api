@@ -151,7 +151,7 @@ export async function factCheck(
     (item) => item.source === "cofacts-human",
   ).length;
   meta.cofacts_ai_checks = details.evidence.filter((item) => item.source === "cofacts-ai").length;
-  // Issue #10、#24：一般 url-only 仍走常識判斷；gov.tw／edu.tw 白名單網址
+  // Issue #10、#24：一般 url-only 仍走常識判斷；白名單機構網址
   // 可在 Cofacts 無資料時作為參考證據。
   meta.no_relevant_evidence =
     details.evidence.length === 0 && urlContext?.reliability !== "allowlisted-institution";

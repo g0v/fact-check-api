@@ -81,7 +81,7 @@ export async function synthesize(
   try {
     if (!env.AI) throw new Error(synthesisErrorMessages.missing_binding);
     const ai = env.AI;
-    // 一般使用者網址不能單獨支撐主張；gov.tw／edu.tw 白名單來源則可在 Cofacts
+    // 一般使用者網址不能單獨支撐主張；白名單機構來源則可在 Cofacts
     // 無資料時作為機構參考證據。白名單只確認來源網域，不代表內容必然正確。
     const hasUsableEvidence = evidence.some(
       (item) =>

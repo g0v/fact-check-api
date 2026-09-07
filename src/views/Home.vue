@@ -173,11 +173,12 @@ const verdicts = [
             bytes。沒有網址時請省略 <code>url</code>，不要傳空字串或 <code>null</code>。
           </p>
           <div class="callout">
-            <strong>政府與教育機構網址可作參考，其他網址只提供背景。</strong>
+            <strong>白名單機構網址可作參考，其他網址只提供背景。</strong>
             <p>
               支援 HTML 與純文字頁面，不執行網頁 JavaScript。網址抓取失敗時，Cofacts
               查核仍會繼續，並在回應保留警告。重新導向後的最終網址若屬於
-              <code>gov.tw</code>、<code>edu.tw</code> 或其子網域，查無 Cofacts
+              <code>gov.tw</code>、<code>edu.tw</code> 或其子網域，或以
+              <code>https://tfc-taiwan.org.tw</code> 開頭，查無 Cofacts
               資料時仍可作為機構參考證據；網域白名單不保證內容正確，仍需核對發布機關、適用範圍與時效。
               其他網址只有在取得 Cofacts 證據時，才會以最低優先序作為背景；否則改以模型常識推估，
               信心值上限 0.5。

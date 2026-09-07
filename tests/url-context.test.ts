@@ -13,9 +13,14 @@ describe("URL SSRF 與資源限制", () => {
     ["https://edu.tw", true],
     ["https://school.edu.tw", true],
     ["https://www.nccu.edu.tw/", true],
+    ["https://tfc-taiwan.org.tw", true],
+    ["https://tfc-taiwan.org.tw/articles/123?source=test#result", true],
     ["https://fakegov.tw", false],
     ["https://gov.tw.example.com", false],
     ["https://edu.tw.evil.example", false],
+    ["http://tfc-taiwan.org.tw", false],
+    ["https://www.tfc-taiwan.org.tw", false],
+    ["https://tfc-taiwan.org.tw.evil.example", false],
   ])("機構網址白名單安全比對 %s：%s", (value, expected) => {
     expect(isAllowlistedInstitutionUrl(new URL(value))).toBe(expected);
   });
@@ -175,19 +180,22 @@ describe("URL SSRF 與資源限制", () => {
     expect(new Headers(init?.headers).has("Cookie")).toBe(false);
   });
 
-  it.each(["https://gov.tw", "https://school.edu.tw", "https://www.nccu.edu.tw/"])(
-    "白名單機構網址標記為可用參考證據：%s",
-    async (url) => {
-      expect(await fetchUrlContext(url, urlFetcher())).toMatchObject({
-        source: "provided-url",
-        reliability: "allowlisted-institution",
-      });
-    },
-  );
+  it.each([
+    "https://gov.tw",
+    "https://school.edu.tw",
+    "https://www.nccu.edu.tw/",
+    "https://tfc-taiwan.org.tw/articles/123",
+  ])("白名單機構網址標記為可用參考證據：%s", async (url) => {
+    expect(await fetchUrlContext(url, urlFetcher())).toMatchObject({
+      source: "provided-url",
+      reliability: "allowlisted-institution",
+    });
+  });
 
   it.each([
     ["https://gov.tw", "https://example.com", "user-provided"],
     ["https://example.com", "https://agency.gov.tw", "allowlisted-institution"],
+    ["https://example.com", "https://tfc-taiwan.org.tw/articles/123", "allowlisted-institution"],
   ])("依重新導向後的最終網址判定白名單：%s → %s", async (start, target, reliability) => {
     const fetcher = vi.fn<Fetcher>(async (input) => {
       const url = new URL(String(input));
