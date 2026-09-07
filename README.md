@@ -198,27 +198,28 @@ HTTP 200 時仍需檢查 `status`：
 }
 ```
 
-| HTTP | error                  | 處理方式                                                      |
-| ---- | ---------------------- | ------------------------------------------------------------- |
-| 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤 |
-| 403  | `FORBIDDEN_ORIGIN`     | POST 來源不符本站、未提供 Origin，或發送不支援的 OPTIONS 預檢 |
-| 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                              |
-| 429  | `BUDGET_EXCEEDED`      | 本小時模型費用已達上限；依 `Retry-After` 秒數於整點後重試     |
-| 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                |
-| 503  | `BUDGET_UNAVAILABLE`   | 用量控管的 Durable Object 暫時無法使用，稍後重試              |
-| 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                      |
+| HTTP | error                  | 處理方式                                                           |
+| ---- | ---------------------- | ------------------------------------------------------------------ |
+| 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤      |
+| 403  | `FORBIDDEN_ORIGIN`     | POST 來源不符本站、未提供 Origin，或發送不支援的 OPTIONS 預檢      |
+| 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                                   |
+| 429  | `BUDGET_EXCEEDED`      | 今日 Workers AI 用量已達上限；依 `Retry-After` 秒數於 UTC 隔日重試 |
+| 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                     |
+| 503  | `BUDGET_UNAVAILABLE`   | 用量控管的 Durable Object 暫時無法使用，稍後重試                   |
+| 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                           |
 
 Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL 文字才繼續並標記 partial，否則回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
 
-## 每小時費用上限
+## 每日 Workers AI 用量上限
 
-為避免模型費用失控，服務以 Durable Object 集中記錄每個 UTC 整點小時的模型費用，預設上限為每小時 0.01 美元，可在 `wrangler.jsonc` 的 `vars.HOURLY_BUDGET_USD` 調整，不需改程式。
+為了只使用 Workers AI 的免費額度，服務以 Durable Object 集中記錄每個 UTC 日的 Workers AI 用量（neurons），預設上限 10,000 neurons，等於 Cloudflare 公告的每日免費額度；可在 `wrangler.jsonc` 的 `vars.DAILY_NEURON_BUDGET` 調整，不需改程式。
 
-- 只有未命中快取的查核才會消耗額度；快取命中、輸入驗證失敗與來源檢查失敗都不計費。
-- 每次查核先依輸入長度與典型候選、證據量預留估算費用，完成後以上游回報的 token 數與公告牌價結算實際金額；安全層封鎖或中途失敗時只計已呼叫的模型。
-- 預留後總額超過上限時回 HTTP 429／`BUDGET_EXCEEDED` 並附 `Retry-After`，不呼叫任何上游；額度於下個整點自動重設。
-- 金額依 OpenRouter 與 Workers AI 公告的每百萬 token 牌價計算，不扣除 Workers AI 每日免費 neurons，實際帳單可能較低。
-- 一次未命中快取的查核約 0.003～0.005 美元，最長輸入與大量證據時可能超過 0.01 美元；0.01 美元的上限大約每小時允許 2～3 次未命中快取的查核。
+- 只計語意初篩（`gpt-oss-20b`）與證據綜整（Gemma）兩段 Workers AI 呼叫；安全分類走 OpenRouter，由 OpenRouter 額度另行計費，不在此上限內。
+- 只有未命中快取的查核才會消耗額度；快取命中、輸入驗證失敗、來源檢查失敗與安全層封鎖都不消耗 Workers AI 額度。
+- 每次查核先依輸入長度與典型候選、證據量預留估算用量，完成後以上游回報的 token 數與 Workers AI 公告的 neurons 換算結算實際用量；中途失敗時只計已回應的模型。
+- 預留後總額超過上限時回 HTTP 429／`BUDGET_EXCEEDED` 並附 `Retry-After`，不呼叫任何上游；額度於 UTC 00:00 自動重設，與 Cloudflare 免費額度的重設時間一致。
+- 一次未命中快取的查核約 300 neurons，最長輸入與大量證據時可達 2,000 neurons 以上；10,000 neurons 大約每日允許 30 次典型的未命中快取查核。
+- 免費額度以 Cloudflare 帳號為單位計算，同帳號其他 Worker 的 Workers AI 用量不在本服務帳本內；若帳號另有用量，請自行調低上限。
 
 ## 查核流程
 
@@ -267,7 +268,7 @@ src/
 ├── index.ts                 # 掛載 API、首頁與既有 SSR 路由
 ├── api/
 │   ├── index.ts             # middleware 與錯誤回應
-│   ├── config.ts            # 模型、門檻、資源限制與每小時費用上限
+│   ├── config.ts            # 模型、門檻、資源限制與每日 Workers AI 用量上限
 │   ├── routes/
 │   ├── middleware/          # POST 同源 Origin 檢查
 │   ├── services/            # 各查核階段與 orchestrator

@@ -294,7 +294,7 @@ const verdicts = [
                 <tr>
                   <th scope="row">429</th>
                   <td><code>BUDGET_EXCEEDED</code></td>
-                  <td>本小時模型費用已達上限；依 Retry-After 秒數於整點後重試。</td>
+                  <td>今日 Workers AI 用量已達上限；依 Retry-After 秒數於 UTC 隔日重試。</td>
                 </tr>
                 <tr>
                   <th scope="row">502</th>

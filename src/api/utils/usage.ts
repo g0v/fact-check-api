@@ -1,6 +1,6 @@
 import { BUDGET } from "../config";
 
-export type UsageStage = keyof typeof BUDGET.pricingUsdPerMillion;
+export type UsageStage = "moderation" | "relevance" | "synthesis";
 export type UsageSample = {
   stage: UsageStage;
   model: string;
@@ -59,15 +59,17 @@ export function measureUsage(
   };
 }
 
-export function usageCostUsd(stage: UsageStage, promptTokens: number, completionTokens: number) {
-  const price = BUDGET.pricingUsdPerMillion[stage];
-  return (promptTokens * price.input + completionTokens * price.output) / 1_000_000;
+// 只有 Workers AI 階段消耗 neurons；安全分類由 OpenRouter 計費，記為 0。
+export function usageNeurons(stage: UsageStage, promptTokens: number, completionTokens: number) {
+  if (stage === "moderation") return 0;
+  const rate = BUDGET.neuronsPerMillionTokens[stage];
+  return (promptTokens * rate.input + completionTokens * rate.output) / 1_000_000;
 }
 
 export type UsageMeter = {
   record: UsageRecorder;
   samples: UsageSample[];
-  totalUsd(): number;
+  totalNeurons(): number;
 };
 
 export function createUsageMeter(): UsageMeter {
@@ -77,9 +79,9 @@ export function createUsageMeter(): UsageMeter {
     record: (sample) => {
       samples.push(sample);
     },
-    totalUsd: () =>
+    totalNeurons: () =>
       samples.reduce(
-        (sum, item) => sum + usageCostUsd(item.stage, item.promptTokens, item.completionTokens),
+        (sum, item) => sum + usageNeurons(item.stage, item.promptTokens, item.completionTokens),
         0,
       ),
   };

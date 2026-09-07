@@ -21,32 +21,32 @@ describe("Workers 原生 Durable Object 預算控管", () => {
         `
 import {
   UsageBudget,
-  reserveHourlyBudget,
-  settleHourlyBudget,
+  reserveDailyBudget,
+  settleDailyBudget,
 } from ${source("../src/api/services/usage-budget.ts")};
 
 export { UsageBudget };
 export default { async test(_controller, env) {
   const logs = [];
   const log = (event) => logs.push(event);
-  const limited = { ...env, HOURLY_BUDGET_USD: "0.005" };
-  const first = await reserveHourlyBudget(limited, "測試主張", "first", log);
+  const limited = { ...env, DAILY_NEURON_BUDGET: "500" };
+  const first = await reserveDailyBudget(limited, "測試主張", "first", log);
   if (!first || !first.status.allowed) throw new Error("第一次預留未通過。");
-  if (first.status.limitUsd !== 0.005) throw new Error("上限未傳入 Durable Object。");
-  await settleHourlyBudget(limited, first, 0.02, "first", log);
+  if (first.status.limitNeurons !== 500) throw new Error("上限未傳入 Durable Object。");
+  await settleDailyBudget(limited, first, 2_000, "first", log);
   const settled = logs.find((event) => event.operation === "settle");
-  if (!settled || settled.status !== "settled" || settled.spent_usd < 0.02) {
+  if (!settled || settled.status !== "settled" || settled.spent_neurons < 2_000) {
     throw new Error("結算未寫入實際用量。");
   }
   let rejected = false;
   try {
-    await reserveHourlyBudget(limited, "測試主張", "second", log);
+    await reserveDailyBudget(limited, "測試主張", "second", log);
   } catch (error) {
     rejected =
       error.code === "BUDGET_EXCEEDED" && error.status === 429 && error.retryAfterSeconds >= 1;
   }
   if (!rejected) throw new Error("超過上限時未拒絕。");
-  if (!logs.some((event) => event.status === "rejected" && event.hour_rejected === 1)) {
+  if (!logs.some((event) => event.status === "rejected" && event.day_rejected === 1)) {
     throw new Error("未記錄拒絕次數。");
   }
   if (JSON.stringify(logs).includes("測試主張")) throw new Error("紀錄含有原文。");

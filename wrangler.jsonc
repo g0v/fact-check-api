@@ -5,8 +5,8 @@
   "compatibility_date": "2026-04-17",
   "ai": { "binding": "AI" },
   "assets": { "directory": "./public/", "binding": "ASSETS" },
-  // 議題 #9：每小時模型費用上限（美元）；調整此值不需改程式。
-  "vars": { "HOURLY_BUDGET_USD": "0.01" },
+  // 議題 #9：每日 Workers AI 用量上限（neurons），預設等於免費額度；調整此值不需改程式。
+  "vars": { "DAILY_NEURON_BUDGET": "10000" },
   "durable_objects": {
     "bindings": [{ "name": "USAGE_BUDGET", "class_name": "UsageBudget" }],
   },

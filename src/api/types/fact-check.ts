@@ -94,8 +94,8 @@ export type DurableObjectNamespaceLike = {
 };
 export type ApiBindings = {
   OPENROUTER_API_KEY?: string;
-  // 議題 #9：每小時費用上限（美元），未設定時採用 BUDGET.hourlyUsd。
-  HOURLY_BUDGET_USD?: string | number;
+  // 議題 #9：每日 Workers AI 用量上限（neurons），未設定時採用 BUDGET.dailyNeurons。
+  DAILY_NEURON_BUDGET?: string | number;
   USAGE_BUDGET?: DurableObjectNamespaceLike;
   AI?: {
     run(
