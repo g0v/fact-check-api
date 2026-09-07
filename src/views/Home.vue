@@ -315,8 +315,10 @@ const verdicts = [
             </table>
           </div>
           <p>
-            Safeguard 或 Gemma 失敗回 502。Cofacts 搜尋或語意初篩失敗時，只有已成功取得 URL
-            文字才能繼續並回 partial，否則回 502。單篇詳細證據失敗則保留其他資料。
+            Gemma（證據綜整）失敗回 502。Safeguard 暫時失敗時跳過安全分類，並將 moderation.decision
+            標記為 skipped，以 partial 狀態繼續查核；只有缺少金鑰
+            （OPENROUTER_API_KEY）等設定錯誤才回 502。 Cofacts 搜尋或語意初篩失敗時，只有已成功取得
+            URL 文字才能繼續並回 partial，否則回 502。 單篇詳細證據失敗則保留其他資料。
           </p>
           <p class="note">
             查核回應附有 <code>X-Request-Id</code> 與 <code>Cache-Control: no-store</code>。<code
