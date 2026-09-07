@@ -6,7 +6,7 @@ import {
   createResultCacheKey,
   type ResultCache,
 } from "../src/api/services/cached-fact-check";
-import { claim, emptySynthesisOutput, harness } from "./helpers";
+import { claim, harness } from "./helpers";
 
 const origin = "https://api.example.test";
 const input = { text: claim };
@@ -129,19 +129,21 @@ describe("查核結果快取", () => {
     },
   );
 
-  it("上游失敗不寫入；證據不足的完整成功結果仍可快取", async () => {
+  it("上游失敗不寫入；無證據的常識判斷結果仍可快取且保留下修後的 confidence", async () => {
     const failed = harness({ safetyFailure: true });
     const { cache } = memoryCache();
     await expect(
       cachedFactCheck(input, failed.env, { ...failed, cache, origin }),
     ).rejects.toMatchObject({ status: 502 });
     expect(cache.put).not.toHaveBeenCalled();
-    const h = harness({ edges: [], synthesis: emptySynthesisOutput });
+    const h = harness({ edges: [] });
     await cachedFactCheck(input, h.env, { ...h, cache, origin });
     const hit = await cachedFactCheck(input, h.env, { ...h, cache, origin });
     expect(hit.meta.cache?.status).toBe("hit");
-    expect(hit.factuality).toBe(0.5);
-    expect(hit.verdict).toBe("insufficient_evidence");
+    expect(hit.factuality).toBe(0.75);
+    expect(hit.confidence).toBe(0.5);
+    expect(hit.verdict).toBe("mostly_supported");
+    expect(hit.meta.no_relevant_evidence).toBe(true);
   });
 
   it.each(["read", "write", "schedule"])(

@@ -19,6 +19,7 @@ describe("完整查核流程（模擬外部傳輸）", () => {
       cofacts_relevant: 1,
       cofacts_human_checks: 1,
       cofacts_ai_checks: 1,
+      no_relevant_evidence: false,
     });
     expect(result.related_checks.map((item) => item.type)).toEqual(["cofacts_human", "cofacts_ai"]);
     expect(result.related_checks[0]).toMatchObject({
@@ -115,16 +116,22 @@ describe("完整查核流程（模擬外部傳輸）", () => {
       status: "completed",
       verdict: "insufficient_evidence",
       related_checks: [],
+      meta: { no_relevant_evidence: true },
     });
     expect(h.run.mock.calls.at(-1)?.[0]).toBe(MODELS.synthesis);
     expect(JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content).evidence).toEqual([]);
   });
 
-  it("沒有證據時拒絕模型靠記憶判真", async () => {
+  it("沒有證據時採常識判斷，confidence 下修至 0.5", async () => {
     const h = harness({ edges: [] });
-    await expect(factCheck({ text: claim }, h.env, h)).rejects.toMatchObject({
-      status: 502,
-      stage: "synthesis",
+    const result = await factCheck({ text: claim }, h.env, h);
+    expect(result).toMatchObject({
+      status: "completed",
+      factuality: 0.75,
+      confidence: 0.5,
+      verdict: "mostly_supported",
+      related_checks: [],
+      meta: { no_relevant_evidence: true },
     });
   });
 
@@ -150,6 +157,7 @@ describe("完整查核流程（模擬外部傳輸）", () => {
       const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
       expect(result.status).toBe("partial");
       expect(result.meta.warnings).toEqual([{ stage, code: "UPSTREAM_UNAVAILABLE" }]);
+      expect(result.meta.no_relevant_evidence).toBe(false);
       expect(result.related_checks).toEqual([]);
       expect(JSON.parse(h.run.mock.calls.at(-1)![1].messages[1].content).evidence).toEqual([
         expect.objectContaining({ source: "provided-url", reliability: "user-provided" }),
@@ -169,6 +177,7 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
     expect(result.status).toBe("partial");
     expect(result.meta.warnings.map((item) => item.stage)).toEqual(["url", "cofacts-evidence"]);
+    expect(result.meta.no_relevant_evidence).toBe(true);
     expect(result.related_checks).toEqual([]);
   });
 

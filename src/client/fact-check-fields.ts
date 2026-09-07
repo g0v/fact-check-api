@@ -87,6 +87,11 @@ const fields: Record<string, FieldInfo> = {
     label: "是否使用網址背景",
     description: "true：已使用提供網址的文字作為背景；false：沒有使用。",
   },
+  "meta.no_relevant_evidence": {
+    label: "是否查無相關證據",
+    description:
+      "true：查無相關查核資料，判斷為模型常識推估，confidence 已下修至最高 0.5；false：有實際證據。",
+  },
   "meta.cache": {
     label: "Worker 快取",
     description: "是否重用先前完整成功的查核；命中時保留原有證據與分數，本次不重跑模型。",

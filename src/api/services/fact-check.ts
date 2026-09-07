@@ -43,6 +43,7 @@ export async function factCheck(
     cofacts_human_checks: 0,
     cofacts_ai_checks: 0,
     url_context_used: false,
+    no_relevant_evidence: false,
     warnings,
   };
   log({
@@ -127,12 +128,15 @@ export async function factCheck(
     (item) => item.source === "cofacts-human",
   ).length;
   meta.cofacts_ai_checks = details.evidence.filter((item) => item.source === "cofacts-ai").length;
+  // Issue #10：完全沒有可用證據時標記狀態，交 Gemma 常識判斷並下修 confidence。
+  meta.no_relevant_evidence = evidence.length === 0;
   log({
     event: "evidence",
     request_id: requestId,
     human_count: meta.cofacts_human_checks,
     ai_count: meta.cofacts_ai_checks,
     has_url_context: Boolean(urlContext),
+    no_relevant_evidence: meta.no_relevant_evidence,
   });
   const result = await stage("synthesis", () => synthesize(input, moderation, evidence, env));
   const relatedChecks: RelatedCheck[] = details.evidence.map((item) => ({

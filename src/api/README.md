@@ -20,13 +20,13 @@
 - 正常回 HTTP 200、`status: completed`；有可恢復的上游失敗則回 HTTP 200、`status: partial`，原因在 `meta.warnings`。
 - 每次回應有 `X-Request-Id` 與 `Cache-Control: no-store`。API 錯誤含繁體中文 message、固定英文 error code 與 request ID。
 
-| 失敗階段                  | 行為                                                            |
-| ------------------------- | --------------------------------------------------------------- |
-| Safeguard                 | HTTP 502，不略過安全層                                          |
-| Cofacts search／relevance | 已成功抓到 URL 文字才以 URL 繼續並標記 partial，否則 HTTP 502   |
-| Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                     |
-| URL                       | 保留警告，Cofacts 照常；搜尋成功但沒有證據時交 Gemma 回證據不足 |
-| Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                    |
+| 失敗階段                  | 行為                                                          |
+| ------------------------- | ------------------------------------------------------------- |
+| Safeguard                 | HTTP 502，不略過安全層                                        |
+| Cofacts search／relevance | 已成功抓到 URL 文字才以 URL 繼續並標記 partial，否則 HTTP 502 |
+| Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                   |
+| URL                       | 保留警告，Cofacts 照常；搜尋成功但沒有證據時交 Gemma 常識判斷 |
+| Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                  |
 
 ## Safeguard 呼叫契約
 
@@ -102,7 +102,7 @@ Workers 的 `fetch` 不支援 `redirect: "error"`，使用時會在連線前拋�
 
 每筆 evidence 文字最多 6,000 個 UTF-16 code unit。綜整時另分配全體 evidence 共 60,000 的本文文字預算，以及各半的原始文章與引文文字預算，避免過量回覆超出 context。`related_checks` 由程式根據實際 Cofacts 證據建立，不由模型編造；每筆保留 Cofacts article URL。
 
-Gemma 為唯一真假判斷階段。當 evidence 空陣列時，模型必須回 `insufficient_evidence`、`factuality: 0.5`、`confidence <= 0.2`；違反便回上游錯誤。這裡的 0.5 表示未能判定，不是「有一半機率為真」。各門檻仍須以真實 dataset 校準。
+Gemma 為唯一真假判斷階段。當 evidence 空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式以 `meta.no_relevant_evidence` 標記此狀態，並在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
 
 ## URL 抓取邊界
 

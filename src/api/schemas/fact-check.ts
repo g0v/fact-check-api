@@ -43,14 +43,7 @@ export function parseSynthesis(value: unknown, hasEvidence: boolean): SynthesisR
     confidence: unitNumber(data.confidence),
     feedback: string(data.feedback, 6_000),
   };
-  // 沒有證據時要求模型遵守契約；違反便回上游錯誤，不自行捏造分數。
-  if (
-    !hasEvidence &&
-    (result.verdict !== "insufficient_evidence" ||
-      result.confidence > 0.2 ||
-      result.factuality !== 0.5)
-  ) {
-    throw new Error("模型在缺少證據時產生不受支持的判斷。");
-  }
+  // 沒有證據時是常識判斷，confidence 上限為 0.5；超過就由程式下修，不整筆丟棄。
+  if (!hasEvidence && result.confidence > 0.5) result.confidence = 0.5;
   return result;
 }

@@ -55,7 +55,8 @@ function parseCacheEntry(value: unknown): CacheEntry {
     entry.cachedAt + RESULT_CACHE.ttlSeconds * 1000 <= Date.now() ||
     result.status !== "completed" ||
     array(meta.warnings).length !== 0 ||
-    typeof meta.url_context_used !== "boolean"
+    typeof meta.url_context_used !== "boolean" ||
+    typeof meta.no_relevant_evidence !== "boolean"
   )
     throw new Error("快取已過期或格式不正確。");
   for (const key of [
@@ -70,7 +71,12 @@ function parseCacheEntry(value: unknown): CacheEntry {
   if (parseModeration(result.moderation).decision === "block")
     throw new Error("不可採用封鎖結果的快取。");
   const checks = array(result.related_checks);
-  parseSynthesis(result, checks.length > 0 || meta.url_context_used);
+  const hasEvidence = checks.length > 0 || meta.url_context_used === true;
+  if (meta.no_relevant_evidence !== !hasEvidence) throw new Error("快取證據狀態不一致。");
+  parseSynthesis(result, hasEvidence);
+  // parseSynthesis 只下修回傳副本；快取原值超過上限就整筆拒絕，不服務未下修的結果。
+  if (!hasEvidence && unitNumber(result.confidence) > 0.5)
+    throw new Error("快取在無證據時信心值超過上限。");
   for (const value of checks) {
     const check = record(value);
     enumValue(check.type, ["cofacts_human", "cofacts_ai"]);
