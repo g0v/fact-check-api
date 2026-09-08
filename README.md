@@ -226,6 +226,27 @@ Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼�
 - 一次未命中快取的查核約 300 neurons，最長輸入與大量證據時可達 2,000 neurons 以上；10,000 neurons 大約每日允許 30 次典型的未命中快取查核。
 - 免費額度以 Cloudflare 帳號為單位計算，同帳號其他 Worker 的 Workers AI 用量不在本服務帳本內；若帳號另有用量，請自行調低上限。
 
+### 超過免費額度時的成本概算
+
+以下依 2026-09-08 的官方標價估算，只計模型推論，不含 Workers Paid 方案月費、稅金及其他 Workers／Durable Objects 用量。Cloudflare 每個帳號每日前 10,000 neurons 免費；超額用量為每 1,000 neurons **US$0.011**。若要在平台上使用超過免費額度的 Workers AI，除了調高 `DAILY_NEURON_BUDGET`，帳號也必須使用 Workers Paid 方案；只調高本服務的變數不會增加 Cloudflare 帳號額度。Workers Paid 目前最低為 **US$5／月**，這是帳號方案費，不應攤成單次查核的固定模型成本。
+
+| 項目                              | 官方單價                                                  | 一次典型未命中快取查核的試算                                                                                                |
+| --------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Workers AI `gpt-oss-20b` 與 Gemma | 每 1,000 neurons US$0.011；兩個模型合計典型約 300 neurons | 免費額度尚未用完為 US$0；用完後約 **US$0.0033**                                                                             |
+| OpenRouter Safeguard              | 每百萬 input tokens US$0.075、output tokens US$0.30       | 假設約 500 input tokens、100 output tokens，約 **US$0.0000675**；若 output 用滿程式設定的 1,600 tokens，約 **US$0.0005175** |
+
+因此，未命中快取且通過安全分類的一次典型查核，在 Workers AI 免費額度內約為 **US$0.00007～0.00052**；當該帳號當日免費 neurons 已用完後，約為 **US$0.0034～0.0038**。這不是固定報價：實際金額取決於兩段 Workers AI 與 Safeguard 的 input／output token 數；最長輸入與大量證據若消耗 2,000 neurons，僅 Workers AI 超額費就約 **US$0.022**。
+
+換算公式如下：
+
+```text
+Workers AI 超額費 = neurons / 1,000 × US$0.011
+OpenRouter 費用 = input_tokens / 1,000,000 × US$0.075
+                + output_tokens / 1,000,000 × US$0.30
+```
+
+快取命中不呼叫 Safeguard 或 Workers AI，模型推論成本為 US$0；安全層封鎖時只產生 OpenRouter 費用。Cloudflare 與 OpenRouter 可能調整價格，部署前請重新核對 [Workers AI 定價](https://developers.cloudflare.com/workers-ai/platform/pricing/)、[Workers 方案定價](https://developers.cloudflare.com/workers/platform/pricing/)及 [OpenRouter Safeguard 定價](https://openrouter.ai/openai/gpt-oss-safeguard-20b/pricing)。
+
 ## 查核流程
 
 | 階段     | 服務                                       | 職責                                                     |
