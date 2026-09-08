@@ -7,8 +7,8 @@
   "assets": { "directory": "./public/", "binding": "ASSETS" },
   // 議題 #9：每日 Workers AI 用量上限（neurons），預設等於免費額度；調整此值不需改程式。
   "vars": {
-    "DAILY_NEURON_BUDGET": "10000",
-    // "DAILY_NEURON_BUDGET": "100000"  // 若要測試超過免費額度的情境，可將此值調高。
+    // "DAILY_NEURON_BUDGET": "10000",
+    "DAILY_NEURON_BUDGET": "100000"  // 若要測試超過免費額度的情境，可將此值調高。
   },
   "durable_objects": {
     "bindings": [{ "name": "USAGE_BUDGET", "class_name": "UsageBudget" }],
