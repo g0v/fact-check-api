@@ -103,6 +103,7 @@ export type ApiBindings = {
   RATE_LIMITER?: {
     limit(options: { key: string }): Promise<{ success: boolean }>;
   };
+  RATE_LIMIT_WINDOW_MS?: string | number;
   RATE_LIMIT_DO?: DurableObjectNamespaceLike;
   AI?: {
     run(

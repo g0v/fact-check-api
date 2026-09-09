@@ -8,8 +8,11 @@ export class RateLimiterDO {
   private lastAllowedMs = 0;
 
   async fetch(request: Request): Promise<Response> {
+    const configuredWindowMs = Number(new URL(request.url).searchParams.get("window_ms"));
     const windowMs =
-      Number(new URL(request.url).searchParams.get("window_ms")) || RATE_LIMIT.windowMs;
+      Number.isFinite(configuredWindowMs) && configuredWindowMs > 0
+        ? configuredWindowMs
+        : RATE_LIMIT.windowMs;
     const now = Date.now();
     if (now - this.lastAllowedMs < windowMs) {
       return Response.json({ allowed: false });

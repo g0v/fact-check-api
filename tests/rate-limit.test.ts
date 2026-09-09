@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { api } from "../src/api";
 import { RATE_LIMIT } from "../src/api/config";
-import { ipRateLimitKeyFromIp } from "../src/api/middleware/rate-limit";
+import { ipRateLimitKeyFromIp, resolveRateLimitWindowMs } from "../src/api/middleware/rate-limit";
 import { RateLimiterDO } from "../src/api/services/rate-limiter-do";
 import type { DurableObjectNamespaceLike } from "../src/api/types/fact-check";
 import { claim, harness } from "./helpers";
@@ -61,6 +61,19 @@ describe("IP 限流 key 正規化", () => {
   });
 });
 
+describe("限流視窗設定", () => {
+  it("接受 binding 的字串或數字覆蓋值", () => {
+    expect(resolveRateLimitWindowMs({ RATE_LIMIT_WINDOW_MS: "5000" })).toBe(5_000);
+    expect(resolveRateLimitWindowMs({ RATE_LIMIT_WINDOW_MS: 1_500 })).toBe(1_500);
+  });
+
+  it("缺漏或無效值採用預設視窗", () => {
+    for (const raw of [undefined, "", "oops", "0", 0, -1, Number.NaN]) {
+      expect(resolveRateLimitWindowMs({ RATE_LIMIT_WINDOW_MS: raw })).toBe(RATE_LIMIT.windowMs);
+    }
+  });
+});
+
 describe("同 IP 流量限制", () => {
   it("無 cf-connecting-ip 時不限流，連續請求都放行", async () => {
     const first = await api.request(
@@ -79,7 +92,11 @@ describe("同 IP 流量限制", () => {
 
   it("冷卻視窗內第二次請求被擋，回 429 與 Retry-After", async () => {
     const { namespace, fetch } = rateLimitNamespace();
-    const env = { ...setupUpstream(), RATE_LIMIT_DO: namespace };
+    const env = {
+      ...setupUpstream(),
+      RATE_LIMIT_WINDOW_MS: "5000",
+      RATE_LIMIT_DO: namespace,
+    };
     const headers = { "cf-connecting-ip": "203.0.113.7" };
 
     const first = await api.request(
@@ -99,10 +116,11 @@ describe("同 IP 流量限制", () => {
       error: "RATE_LIMITED",
       message: "請求過於頻繁，請稍後再試。",
     });
-    expect(Number(second.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(second.headers.get("retry-after")).toBe("5");
 
     // 同一 key 一顆 DO：兩次請求都路由到同一個物件。
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenLastCalledWith("https://rate-limit/?window_ms=5000");
   });
 
   it("不同 IP 互不影響冷卻", async () => {
@@ -197,6 +215,27 @@ describe("同 IP 流量限制", () => {
     expect(consoleError).toHaveBeenCalled();
   });
 
+  it("DO 回傳錯誤狀態或無效格式時優雅降級放行", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const response of [
+      Response.json({ error: "測試錯誤" }, { status: 500 }),
+      Response.json({ allowed: "yes" }),
+    ]) {
+      const namespace: DurableObjectNamespaceLike = {
+        idFromName: (name) => name,
+        get: () => ({ fetch: async () => response.clone() }),
+      };
+      const env = { ...setupUpstream(), RATE_LIMIT_DO: namespace };
+      const result = await api.request(
+        `/fact-check?text=${encodeURIComponent(claim)}`,
+        { headers: { "cf-connecting-ip": "203.0.113.7" } },
+        env,
+      );
+      expect(result.status).toBe(200);
+    }
+    expect(consoleError).toHaveBeenCalledTimes(2);
+  });
+
   it("內建限流 binding 拒絕時直接擋下", async () => {
     const env = {
       ...setupUpstream(),
@@ -233,5 +272,13 @@ describe("RateLimiterDO 冷卻", () => {
     expect(await (await get()).json()).toEqual({ allowed: false });
     vi.advanceTimersByTime(RATE_LIMIT.windowMs + 1);
     expect(await (await get()).json()).toEqual({ allowed: true });
+  });
+
+  it("window_ms 為非正數時採用預設視窗", async () => {
+    vi.useFakeTimers({ now: 1_800_000_000_000 });
+    const object = new RateLimiterDO();
+    const get = () => object.fetch(new Request("https://rate-limit/?window_ms=-1"));
+    expect(await (await get()).json()).toEqual({ allowed: true });
+    expect(await (await get()).json()).toEqual({ allowed: false });
   });
 });
