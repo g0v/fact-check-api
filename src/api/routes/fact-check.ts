@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { LIMITS } from "../config";
+import { factCheckGetCors } from "../middleware/cors";
 import { forbiddenOrigin, sameOriginPost } from "../middleware/same-origin";
 import { ipRateLimit } from "../middleware/rate-limit";
 import { parseInput } from "../schemas/fact-check";
@@ -10,6 +11,7 @@ import { readLimitedText, withTimeout } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
 
+factCheckRoutes.use("/fact-check", factCheckGetCors);
 factCheckRoutes.use("/fact-check", sameOriginPost);
 // 議題 #25：GET 與 POST 都以來源 IP 限流；middleware 需在輸入驗證與查核前擋下。
 factCheckRoutes.use("/fact-check", ipRateLimit);

@@ -369,6 +369,40 @@ describe("Hono GET／POST 介面", () => {
     expect(h.fetcher).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["https://civic.vtaiwan.tw", true],
+    ["http://localhost:5173", true],
+    ["http://localhost:4173", true],
+    ["http://127.0.0.1:8787", true],
+    ["https://localhost:5173", false],
+  ])("GET 對指定來源套用 CORS：%s", async (origin, allowed) => {
+    const h = harness();
+    vi.stubGlobal("fetch", h.fetcher);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const response = await api.request(
+      `/fact-check?text=${encodeURIComponent(claim)}`,
+      { headers: { Origin: origin } },
+      h.env,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(allowed ? origin : null);
+    expect(response.headers.get("Vary")).toBe(allowed ? "Origin" : null);
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+  });
+  it("GET 驗證錯誤也帶允許來源的 CORS header", async () => {
+    const h = harness();
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const response = await api.request(
+      "/fact-check?text=",
+      { headers: { Origin: "https://civic.vtaiwan.tw" } },
+      h.env,
+    );
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://civic.vtaiwan.tw");
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+    expect(await response.json()).toMatchObject({ status: "error", error: "INVALID_INPUT" });
+  });
+
   it("安全層錯誤不將上游內容或 credential 放入 response／log", async () => {
     const h = harness();
     const log = vi.spyOn(console, "info").mockImplementation(() => undefined);
@@ -378,8 +412,14 @@ describe("Hono GET／POST 介面", () => {
         throw new Error("your-openrouter-api-key 模擬上游診斷文字");
       }),
     );
-    const response = await api.request(`/fact-check?text=${encodeURIComponent(claim)}`, {}, h.env);
+    const response = await api.request(
+      `/fact-check?text=${encodeURIComponent(claim)}`,
+      { headers: { Origin: "https://civic.vtaiwan.tw" } },
+      h.env,
+    );
     expect(response.status).toBe(502);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://civic.vtaiwan.tw");
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
     const body = await response.text();
     expect(body + JSON.stringify(log.mock.calls)).not.toContain("your-openrouter-api-key");
     expect(body).not.toContain("模擬上游診斷文字");
