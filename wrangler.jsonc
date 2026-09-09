@@ -8,13 +8,28 @@
   // 議題 #9：每日 Workers AI 用量上限（neurons），預設等於免費額度；調整此值不需改程式。
   "vars": {
     // "DAILY_NEURON_BUDGET": "10000",
-    "DAILY_NEURON_BUDGET": "100000"  // 若要測試超過免費額度的情境，可將此值調高。
+    "DAILY_NEURON_BUDGET": "100000", // 若要測試超過免費額度的情境，可將此值調高。
+    // 議題 #25：同 IP 兩次查核的最短間隔（毫秒），預設 3000 即同 IP 3 秒內最多 1 次查核。
+    "RATE_LIMIT_WINDOW_MS": "3000",
   },
   "durable_objects": {
-    "bindings": [{ "name": "USAGE_BUDGET", "class_name": "UsageBudget" }],
+    "bindings": [
+      { "name": "USAGE_BUDGET", "class_name": "UsageBudget" },
+      // 議題 #25：同 IP 精準冷卻用的 Durable Object（每個 IP key 一顆）。
+      { "name": "RATE_LIMIT_DO", "class_name": "RateLimiterDO" },
+    ],
   },
-  // Free 方案只支援 SQLite 儲存後端的 Durable Objects。
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UsageBudget"] }],
+  // 議題 #25：第一層限流，Cloudflare 內建 Rate Limiting binding，便宜、per-PoP；
+  // 門檻刻意設寬（30 次 / 10 秒），只擋明顯洪水，精準冷卻交給 RATE_LIMIT_DO。
+  // namespace_id 需為本帳號內唯一的正整數字串；與其他 Worker 共用會共享計數器。
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
+  ],
+  // Free 方案只支援 SQLite 儲存後端的 Durable Objects；v2 註冊限流用 class，不可刪改 v1。
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UsageBudget"] },
+    { "tag": "v2", "new_sqlite_classes": ["RateLimiterDO"] },
+  ],
   "observability": {
     "enabled": true,
   },

@@ -50,3 +50,9 @@ export const BUDGET = {
     synthesisOutput: 500,
   },
 } as const;
+
+// 議題 #25：同 IP 流量限制，防止濫用。
+export const RATE_LIMIT = {
+  // 同一 IP 兩次查核的最短間隔；部署可用 RATE_LIMIT_WINDOW_MS 覆蓋。
+  windowMs: 3_000,
+} as const;

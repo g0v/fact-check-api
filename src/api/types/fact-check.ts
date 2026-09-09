@@ -98,6 +98,13 @@ export type ApiBindings = {
   // 議題 #9：每日 Workers AI 用量上限（neurons），未設定時採用 BUDGET.dailyNeurons。
   DAILY_NEURON_BUDGET?: string | number;
   USAGE_BUDGET?: DurableObjectNamespaceLike;
+  // 議題 #25：同 IP 流量限制；兩個 binding 皆未綁定時（本機 dev/測試）整個機制為 no-op。
+  // 內建 Rate Limiting binding 的最小介面。
+  RATE_LIMITER?: {
+    limit(options: { key: string }): Promise<{ success: boolean }>;
+  };
+  RATE_LIMIT_WINDOW_MS?: string | number;
+  RATE_LIMIT_DO?: DurableObjectNamespaceLike;
   AI?: {
     run(
       model: string,

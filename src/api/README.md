@@ -12,6 +12,14 @@
 6. `config.ts`：模型名稱、門檻、文字及時間限制、每日 Workers AI 用量上限與 neurons 換算。
 7. `services/usage-budget.ts`、`utils/usage.ts`：Durable Object 記帳、用量估算與 token 用量紀錄。
 
+## 同 IP 流量限制
+
+`routes/fact-check.ts` 在輸入驗證與查核流程前，對 `/fact-check` 的 GET／POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
+
+middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每個 per-PoP key 每 10 秒 30 次擋洪水，再由 `RATE_LIMIT_DO` Durable Object 以每個 key 記錄上次通過時間，預設冷卻 3 秒。任一 binding 未提供或檢查失敗時，該層採放行策略，避免限流服務故障誤擋正常請求。
+
+任一層拒絕時拋出 `ApiError`，回 HTTP 429、`error: "RATE_LIMITED"` 及 `Retry-After` header。冷卻毫秒數由 `config.ts` 的 `RATE_LIMIT.windowMs`（對應 `wrangler.jsonc` 的 `RATE_LIMIT_WINDOW_MS`，預設 3000）傳給 Durable Object；調整變數即可調整同 IP 間隔。
+
 ## 已確認的 MVP 契約
 
 - `text` trim 後必填，最多 10,000 個 Unicode code point；URL 最長 2,048 個 UTF-16 code unit。
