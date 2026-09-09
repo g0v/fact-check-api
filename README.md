@@ -109,6 +109,14 @@ URL 提供查核背景，未經獨立驗證且優先序最低：抓取成功且�
 
 每次抓取目標前，會透過 Cloudflare 公開 DNS-over-HTTPS 檢查 URL 的公開 DNS A／AAAA 結果；只要結果包含非公開位址便拒絕，且不需要額外 secret。抓取時手動處理最多 3 次 redirect，每次都重新驗證目標；DNS 查詢與整個抓取／讀取流程共用 10 秒期限，回應 body 上限為 1 MB。僅接受 UTF-8／ASCII 編碼的 `text/html` 與 `text/plain`，拒絕明示的其他編碼，且不執行網頁 JavaScript。
 
+## 同 IP 流量限制
+
+`/api/fact-check` 的 GET／POST 都會依 `cf-connecting-ip` 套用兩層限流：第一層是 Cloudflare 內建的 `RATE_LIMITER` binding，門檻為每個 per-PoP key 10 秒 30 次，用來擋明顯洪水；第二層是 `RATE_LIMIT_DO` Durable Object，對每個 IP key 維持 3 秒冷卻，同一 IP 在冷卻期間最多通過一次查核。任一層未綁定或檢查失敗時，該層會放行，服務仍可繼續提供查核。
+
+超過任一限流層時回 HTTP 429，JSON 的 `error` 為 `RATE_LIMITED`，並附 `Retry-After` header，依冷卻視窗建議稍後重試。冷卻視窗由 `wrangler.jsonc` 的 `vars.RATE_LIMIT_WINDOW_MS` 設定，預設為 `3000` 毫秒（3 秒）；調整此值即可調整第二層的同 IP 間隔。
+
+部署時請保留 `RATE_LIMITER` ratelimits binding 與 `RATE_LIMIT_DO` Durable Object binding；未提供這些 binding 的本機開發或測試環境會優雅降級，不會因限流服務不可用而誤擋請求。
+
 ## 回應格式
 
 下列為「查無相關查核資料，改以常識判斷」的格式示例，並非對範例主張的實際查核結果。
