@@ -95,12 +95,25 @@ export async function synthesize(
       Math.floor(60_000 / Math.max(evidence.length, 1)),
     );
     const modelEvidence = (hasUsableEvidence ? evidence : []).map((item) => ({
-      ...item,
+      source: item.source,
+      reliability: item.reliability,
       evidenceText: item.evidenceText.slice(0, textBudget),
-      articleText: item.articleText?.slice(0, Math.floor(textBudget / 2)),
+      // Cofacts 原始文章是「被查核內容」而非證據；保留作語意對照，但以欄位名稱明確標示
+      // 為不可信上下文。原始文章的 references 不送入模型，避免被誤認為查核引用來源。
+      ...(item.source !== "provided-url" && item.articleText
+        ? { untrustedArticleText: item.articleText.slice(0, Math.floor(textBudget / 2)) }
+        : {}),
+      articleId: item.articleId,
+      verdict: item.verdict,
+      classification: item.classification,
       referenceText: item.referenceText?.slice(0, Math.floor(textBudget / 2)),
+      sourceUrl: item.sourceUrl,
       sourceUrls: item.sourceUrls?.slice(0, 3),
-      articleReferences: item.articleReferences?.slice(0, 3),
+      cofactsUrl: item.cofactsUrl,
+      retrievalScore: item.retrievalScore,
+      relevanceScore: item.relevanceScore,
+      positiveFeedback: item.positiveFeedback,
+      negativeFeedback: item.negativeFeedback,
     }));
     const messages: ModelMessage[] = [
       { role: "system", content: synthesisPrompt },

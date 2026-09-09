@@ -124,9 +124,9 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 若每篇相關性分數都相同，可進一步對照兩個紀錄點：`relevance_model_request` 的 `distinct_text_count` 是截斷後送入模型的不同本文數量，`source_text_lengths` 與 `sent_text_lengths` 顯示截斷前後的 UTF-16 長度；`relevance_model_response` 的 `model_relevance_scores` 是模型 JSON 剛解析後、尚未依 ID 對應或套用門檻排序的數值，非數值以 `null` 記錄後仍會驗證失敗。各紀錄的 `article_ids` 與分數依相同索引對應，但模型可以改變文章順序，跨紀錄應以 ID 比對。若此處已全部同分，應追查模型輸入及輸出；不能單憑同分推定為並發污染。初篩只呼叫一次模型並等待結果，各請求使用獨立的區域陣列與 Map。`tests/relevance-isolation.test.ts` 驗證十五筆不同分數、亂序回應及同時請求反序完成的隔離行為。命中結果快取時不會產生這些模型紀錄；診斷修改本身不會使既有快取失效。
 
-詳細資料以文章為單位平行取得。人工與 AI 回覆分別標記 `cofacts-human`／`cofacts-ai`，每篇各最多 10 則，AI 只取 `SUCCESS`。`retrievalScore` 與 `relevanceScore` 分開保存。人工 reply 的 `reference`、hyperlinks 與原始文章的 references 分開；原始訊息出處不會充當人工查核引文。
+詳細資料以文章為單位平行取得。人工與 AI 回覆分別標記 `cofacts-human`／`cofacts-ai`，每篇各最多 10 則，AI 只取 `SUCCESS`。`retrievalScore` 與 `relevanceScore` 分開保存。人工 reply 的 `reference`、hyperlinks 與原始文章的 references 分開；原始訊息出處不會充當人工查核引文，也不會送入 Gemma。
 
-每筆 evidence 文字最多 6,000 個 UTF-16 code unit。綜整時另分配全體 evidence 共 60,000 的本文文字預算，以及各半的原始文章與引文文字預算，避免過量回覆超出 context。`related_checks` 由程式根據實際 Cofacts 證據建立，不由模型編造；每筆保留 Cofacts article URL。
+每筆 evidence 文字最多 6,000 個 UTF-16 code unit。綜整時另分配全體 evidence 共 60,000 的本文文字預算，以及各半的原始文章與引文文字預算，避免過量回覆超出 context。送入 Gemma 時，人工／AI 回覆放在 `evidenceText` 作為判定依據；原始文章只以 `untrustedArticleText` 提供回覆方向所需的語意上下文，prompt 明定其可能為假且不得當作證據。`related_checks` 由程式根據實際 Cofacts 證據建立，不由模型編造；每筆保留 Cofacts article URL。
 
 Gemma 為唯一真假判斷階段。當送入模型的 evidence 為空陣列時，同一輪 prompt 要求模型改用一般常識評估，給出有意義的 `factuality` 與對應 `verdict`，並把 `confidence` 壓在 0.5 以下；常識也無法判斷時才回 `insufficient_evidence`。程式在模型信心值超過 0.5 時下修至 0.5，不整筆拒絕。evidence 非空時仍僅依證據判斷，不足就回 `insufficient_evidence`。各門檻仍須以真實 dataset 校準。
 

@@ -41,6 +41,26 @@ describe("完整查核流程（模擬外部傳輸）", () => {
       "cofacts-human",
       "cofacts-ai",
     ]);
+    expect(synthesis.evidence[0]).toMatchObject({
+      source: "cofacts-human",
+      evidenceText: "測試人工查核說明。",
+      untrustedArticleText: "測試用原始自學補助主張。",
+      referenceText: "參考測試來源 https://example.com/source",
+      sourceUrls: ["https://example.com/source"],
+    });
+    expect(synthesis.evidence[1]).toMatchObject({
+      source: "cofacts-ai",
+      evidenceText: "測試 AI 回覆。",
+      untrustedArticleText: "測試用原始自學補助主張。",
+    });
+    for (const item of synthesis.evidence) {
+      expect(item).not.toHaveProperty("articleText");
+      expect(item).not.toHaveProperty("articleReferences");
+    }
+    expect(h.run.mock.calls[1][1].messages[0].content).toContain(
+      "絕對不得把 untrustedArticleText 本身當成支持或反駁 claim 的證據",
+    );
+    expect(JSON.stringify(synthesis)).not.toContain("https://example.com/original");
     expect(JSON.stringify(synthesis)).not.toContain("國中小性教育");
     const logs = JSON.stringify(h.log.mock.calls);
     for (const event of ["relevance_model_request", "relevance_model_response"])
