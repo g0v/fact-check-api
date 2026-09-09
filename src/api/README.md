@@ -25,7 +25,7 @@ middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每�
 - `text` trim 後必填，最多 10,000 個 Unicode code point；URL 最長 2,048 個 UTF-16 code unit。
 - POST 的 Origin 必須與請求 URL 的 origin 完全一致；跨來源、缺少 Origin 或 `Origin: null` 回 HTTP 403／`FORBIDDEN_ORIGIN`，不呼叫上游。此端點的 OPTIONS 也回 403，不提供跨來源 CORS 授權。
 - POST 必須為 JSON；body 最多 128,000 bytes。URL 選填，拒絕空字串、非 HTTP／HTTPS、內網位址及帶帳號密碼的網址。
-- `allow`／`review` 繼續，`review` 留在 moderation 中；`block` 回 HTTP 200、`status: blocked`，分數與 verdict 為 `null`，不執行下游。
+- `allow`／`review` 繼續，`review` 留在 moderation 中；`block` 回 HTTP 200、`status: blocked`，分數與 verdict 為 `null`，不執行下游。分類代碼非空時不得為 `allow`：模型若回 `allow` 且列出任何分類，`parseModeration()` 會改判為 `block`；`review` 帶分類仍屬查核例外，繼續查核。
 - Safeguard 服務失敗（傳輸、逾時、HTTP 錯誤或輸出格式錯誤）時跳過安全分類：`moderation.decision` 由程式標記為 `skipped`、`meta.warnings` 加入 `moderation`，以 `partial` 繼續查核；缺少金鑰的設定錯誤仍回 HTTP 502。`skipped` 不接受來自模型輸出或快取。
 - 正常回 HTTP 200、`status: completed`；有可恢復的上游失敗則回 HTTP 200、`status: partial`，原因在 `meta.warnings`。
 - 每次回應有 `X-Request-Id` 與 `Cache-Control: no-store`。API 錯誤含繁體中文 message、固定英文 error code 與 request ID。
@@ -44,7 +44,7 @@ middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每�
 
 `services/moderation.ts` 參考 `civic-talk-hono/src/moderation/service.ts` 已實測的 OpenRouter 寫法，使用 `response_format.type: "json_schema"`、`strict: true`、`reasoning: { effort: "low" }`、`max_tokens: 1600` 與 `temperature: 0`。推理 token 也會占用輸出額度；不可只調整 `max_tokens` 而忽略推理設定。
 
-Schema 使用查核 API 的 `decision`（`allow`／`review`／`block`）、`categories`、`reason`；分類政策保留查核例外，真假判定由後續 Gemma 負責。只接受無 choice error、`finish_reason: "stop"` 且 `message.content` 為有效判定 JSON 的回應；截斷、缺少完成標記或格式錯誤一律視為安全層失敗，跳過安全分類並以 `skipped` 標記 partial 繼續查核，不以不完整輸出替代判定。
+Schema 使用查核 API 的 `decision`（`allow`／`review`／`block`）、`categories`、`reason`；分類政策保留查核例外，真假判定由後續 Gemma 負責。`parseModeration()` 為安全決策的唯一來源：`allow` 僅在 `categories` 為空時成立，帶分類的 `allow` 一律由程式改判 `block`（`review` 帶分類不改判）。只接受無 choice error、`finish_reason: "stop"` 且 `message.content` 為有效判定 JSON 的回應；截斷、缺少完成標記或格式錯誤一律視為安全層失敗，跳過安全分類並以 `skipped` 標記 partial 繼續查核，不以不完整輸出替代判定。
 
 `tests/moderation.test.ts` 固定驗證請求參數與異常回應處理；使用模擬傳輸，不代表 fact-check-api 已通過真實模型實測。
 

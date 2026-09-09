@@ -107,6 +107,27 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     expect(review.run).toHaveBeenCalledTimes(2);
   });
 
+  it("allow 卻附分類時改判 block，不呼叫其他服務", async () => {
+    const h = harness({
+      moderation: { decision: "allow", categories: ["hate"], reason: "含有仇恨內容。" },
+    });
+    const result = await factCheck({ text: claim, url: "https://example.com" }, h.env, h);
+    expect(result).toMatchObject({
+      status: "blocked",
+      verdict: null,
+      factuality: null,
+      confidence: null,
+      related_checks: [],
+    });
+    expect(result.moderation).toEqual({
+      decision: "block",
+      categories: ["hate"],
+      reason: "含有仇恨內容。",
+    });
+    expect(h.fetcher).toHaveBeenCalledTimes(1);
+    expect(h.run).not.toHaveBeenCalled();
+  });
+
   it.each([{ safetyFailure: true }, { moderation: { decision: "allow" } }])(
     "安全層失敗時跳過安全分類並繼續查核：%j",
     async (options) => {

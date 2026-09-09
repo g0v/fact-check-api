@@ -15,7 +15,7 @@ const fields: Record<string, FieldInfo> = {
   "moderation.decision": {
     label: "安全決策",
     description:
-      "allow：繼續查核；review：繼續但保留敏感旗標；block：停止查核；skipped：安全分類服務暫時無法使用，本次未執行安全檢查。",
+      "allow：繼續查核（此時不會有分類代碼）；review：繼續但保留敏感旗標；block：停止查核；skipped：安全分類服務暫時無法使用，本次未執行安全檢查。",
   },
   "moderation.categories": {
     label: "安全分類代碼",

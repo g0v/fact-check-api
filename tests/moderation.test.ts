@@ -53,6 +53,17 @@ describe("Safeguard 呼叫契約", () => {
     expect(await moderate(claim, h.env, h.fetcher)).toEqual(moderation);
   });
 
+  it("模型回 allow 卻附分類時由程式改判 block，保留分類與原因", async () => {
+    const h = harness({
+      moderation: { decision: "allow", categories: ["hate"], reason: "含有仇恨內容。" },
+    });
+    expect(await moderate(claim, h.env, h.fetcher)).toEqual({
+      decision: "block",
+      categories: ["hate"],
+      reason: "含有仇恨內容。",
+    });
+  });
+
   it.each([
     { name: "輸出達 token 上限", output: { choices: [{ finish_reason: "length", message }] } },
     { name: "缺少結束原因", output: { choices: [{ message }] } },

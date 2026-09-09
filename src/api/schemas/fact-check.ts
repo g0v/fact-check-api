@@ -28,9 +28,12 @@ export function parseModeration(value: unknown): ModerationResult {
   if (categories.length > 10) throw new Error("安全分類過多。");
   const reason = optionalText(data.reason);
   if (reason && reason.length > 2_000) throw new Error("安全分類原因過長。");
+  const decision = enumValue(data.decision, ["allow", "review", "block"]);
+  const parsedCategories = categories.map((category) => string(category, 100));
+  // 模型可能回 allow 卻附上分類；只要列出任何分類，安全層一律視為 block（查核例外走 review）。
   return {
-    decision: enumValue(data.decision, ["allow", "review", "block"]),
-    categories: categories.map((category) => string(category, 100)),
+    decision: decision === "allow" && parsedCategories.length > 0 ? "block" : decision,
+    categories: parsedCategories,
     ...(reason ? { reason } : {}),
   };
 }
