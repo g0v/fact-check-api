@@ -75,7 +75,7 @@ const verdicts = [
       <div class="endpoint-panel" aria-label="API 端點一覽">
         <p class="panel-label">一個查核端點，兩種呼叫方式</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/fact-check</code></div>
-        <p class="endpoint-note">限本站同源前端，以 JSON 傳入文字與選填網址。</p>
+        <p class="endpoint-note">限本站與允許清單內的前端，以 JSON 傳入文字與選填網址。</p>
         <div class="endpoint-row">
           <span class="method method-get">GET</span><code>/api/fact-check</code>
         </div>
@@ -111,12 +111,14 @@ const verdicts = [
             <code>text</code> 換成你要查核的具體主張；呼叫前，服務維運者需先完成模型設定。
           </p>
           <div class="code-heading">
-            <span><span class="method">POST</span> 同源 JSON 請求</span><span>JavaScript</span>
+            <span><span class="method">POST</span> JSON 請求</span><span>JavaScript</span>
           </div>
           <pre tabindex="0" aria-label="本站前端 POST 查核範例"><code>{{ postExample }}</code></pre>
           <p class="note">
-            POST 必須來自本站相同協定、主機與連接埠；Origin 由瀏覽器自動附上。 跨來源、缺少 Origin
-            或 Origin 為 null 都回 403，不開放跨來源 CORS 預檢。
+            POST 必須來自本站（相同協定、主機與連接埠）或允許清單內的來源：
+            <code>https://check.vtaiwan.tw</code>、<code>https://civic.vtaiwan.tw</code>
+            及帶連接埠的本機開發位址；Origin 由瀏覽器自動附上。清單內的跨來源請求會取得 CORS
+            授權標頭，OPTIONS 預檢回 204。其他來源、缺少 Origin 或 Origin 為 null 都回 403。
           </p>
           <p class="note">
             內容較長或包含敏感資訊時，建議使用 POST，避免文字出現在網址歷史或 access
@@ -290,7 +292,7 @@ const verdicts = [
                 <tr>
                   <th scope="row">403</th>
                   <td><code>FORBIDDEN_ORIGIN</code></td>
-                  <td>POST 來源不符合本站同源限制，或發送了不支援的 OPTIONS 預檢。</td>
+                  <td>POST 或 OPTIONS 的來源不在允許清單，也與本站不同源。</td>
                 </tr>
                 <tr>
                   <th scope="row">413</th>

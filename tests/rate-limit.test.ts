@@ -149,6 +149,36 @@ describe("同 IP 流量限制", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  // 429 是跨來源前端最需要讀到 Retry-After 的情境；錯誤回應少了授權標頭就只剩不透明錯誤。
+  it("跨來源 POST 被限流時，429 仍帶 CORS 與可讀取的 Retry-After", async () => {
+    const { namespace } = rateLimitNamespace();
+    const env = { ...setupUpstream(), RATE_LIMIT_WINDOW_MS: "5000", RATE_LIMIT_DO: namespace };
+    const origin = "https://civic.vtaiwan.tw";
+    const post = () =>
+      api.request(
+        "/fact-check",
+        {
+          method: "POST",
+          headers: {
+            Origin: origin,
+            "Content-Type": "application/json",
+            "cf-connecting-ip": "203.0.113.9",
+          },
+          body: JSON.stringify({ text: claim }),
+        },
+        env,
+      );
+
+    expect((await post()).status).toBe(200);
+    const limited = await post();
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toMatchObject({ status: "error", error: "RATE_LIMITED" });
+    expect(limited.headers.get("Retry-After")).toBe("5");
+    expect(limited.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    expect(limited.headers.get("Access-Control-Expose-Headers")).toContain("Retry-After");
+    expect(limited.headers.has("Access-Control-Allow-Credentials")).toBe(false);
+  });
+
   it("不同 IP 互不影響冷卻", async () => {
     // 模擬 idFromName 路由：不同 key 各自一顆物件，冷卻互不影響。
     const objects: Record<string, RateLimiterDO> = {};
