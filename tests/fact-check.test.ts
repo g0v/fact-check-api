@@ -359,6 +359,23 @@ describe("Hono GET／POST 介面", () => {
     expect(h.fetcher.mock.calls.some(([input]) => String(input) === url)).toBe(true);
   });
 
+  it("GET 可直接解析背景網址內未轉義的單一 query string", async () => {
+    const h = harness();
+    vi.stubGlobal("fetch", h.fetcher);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const url = "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001";
+
+    const response = await api.request(
+      `/fact-check?text=${encodeURIComponent(claim)}&url=${url}`,
+      {},
+      h.env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ url });
+    expect(h.fetcher.mock.calls.some(([input]) => String(input) === url)).toBe(true);
+  });
+
   it.each([
     {},
     { text: "   " },
