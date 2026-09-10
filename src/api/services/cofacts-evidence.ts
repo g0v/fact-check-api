@@ -33,7 +33,7 @@ export function normalizeCofactsEvidence(value: unknown, candidate: RelevantCand
     articleText: (optionalText(article.text) ?? candidate.text).slice(0, LIMITS.evidenceText),
     cofactsUrl: `https://cofacts.tw/article/${encodeURIComponent(candidate.articleId)}`,
     ...(candidate.searchScore === null ? {} : { retrievalScore: candidate.searchScore }),
-    relevanceScore: candidate.relevanceScore,
+    ...(candidate.relevanceScore === undefined ? {} : { relevanceScore: candidate.relevanceScore }),
     articleReferences: array(article.references ?? [])
       .filter((item) => item !== null)
       .map((item) => sourceUrl(record(item).permalink))

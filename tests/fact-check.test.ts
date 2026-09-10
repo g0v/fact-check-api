@@ -196,31 +196,49 @@ describe("完整查核流程（模擬外部傳輸）", () => {
     });
   });
 
-  it.each(["cofacts-search", "relevance"] as const)("%s 失敗且無 URL 時回 502", async (stage) => {
-    const h = harness({
-      searchFailure: stage === "cofacts-search",
-      relevanceFailure: stage === "relevance",
-    });
+  it("Cofacts 搜尋失敗且無 URL 時回 502", async () => {
+    const h = harness({ searchFailure: true });
     await expect(factCheck({ text: claim }, h.env, h)).rejects.toMatchObject({
       status: 502,
-      stage,
+      stage: "cofacts-search",
     });
     expect(h.run.mock.calls.some(([model]) => model === MODELS.synthesis)).toBe(false);
   });
 
-  it.each(["cofacts-search", "relevance"] as const)(
-    "%s 失敗且有 URL 時一律回 502，URL 不作為 fallback",
-    async (stage) => {
-      const h = harness({
-        searchFailure: stage === "cofacts-search",
-        relevanceFailure: stage === "relevance",
-      });
-      await expect(
-        factCheck({ text: claim, url: "https://example.com" }, h.env, h),
-      ).rejects.toMatchObject({ status: 502, stage });
-      expect(h.run.mock.calls.some(([model]) => model === MODELS.synthesis)).toBe(false);
-    },
-  );
+  it("Cofacts 搜尋失敗且有 URL 時仍回 502，URL 不作為 fallback", async () => {
+    const h = harness({ searchFailure: true });
+    await expect(
+      factCheck({ text: claim, url: "https://example.com" }, h.env, h),
+    ).rejects.toMatchObject({ status: 502, stage: "cofacts-search" });
+    expect(h.run.mock.calls.some(([model]) => model === MODELS.synthesis)).toBe(false);
+  });
+
+  it.each([false, true])("相關性初篩失敗時保留所有候選並繼續（有 URL：%s）", async (withUrl) => {
+    const h = harness({ relevanceFailure: true });
+
+    const result = await factCheck(
+      { text: claim, ...(withUrl ? { url: "https://example.com" } : {}) },
+      h.env,
+      h,
+    );
+
+    expect(result.status).toBe("partial");
+    expect(result.meta).toMatchObject({
+      cofacts_candidates: 2,
+      cofacts_relevant: 2,
+      warnings: [{ stage: "relevance", code: "UPSTREAM_UNAVAILABLE" }],
+    });
+    expect(result.related_checks).toHaveLength(4);
+    expect(result.related_checks.every((item) => item.relevance_score === undefined)).toBe(true);
+    expect(h.run.mock.calls.at(-1)?.[0]).toBe(MODELS.synthesis);
+    expect(h.log).toHaveBeenCalledWith({
+      event: "relevance_fallback",
+      request_id: result.meta.request_id,
+      candidate_count: 2,
+      article_ids: ["unrelated", "relevant"],
+      selected_count: 2,
+    });
+  });
 
   it("只有使用者網址而無 Cofacts 證據時，URL 不進模型也不進 related_checks", async () => {
     const h = harness({ edges: [] });

@@ -12,6 +12,7 @@ export type RelevanceResult = {
 };
 
 export type RelevantCandidate = CofactsCandidate & {
-  relevanceScore: number;
-  relevanceReason: string;
+  // 初篩 fail-open 時不虛構模型分數或理由。
+  relevanceScore?: number;
+  relevanceReason?: string;
 };

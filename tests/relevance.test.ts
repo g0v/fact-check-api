@@ -54,6 +54,24 @@ describe("初篩契約與工程藍圖回歸案例", () => {
     );
   });
 
+  it("長篇待查核文字仍配置足夠的 gpt-oss 輸出額度", async () => {
+    const text = "字".repeat(2_300);
+    const h = harness({
+      relevance: {
+        results: [{ article_id: "1", relevant: true, relevance: 0.9, reason: "直接相關。" }],
+      },
+    });
+
+    await filterRelevantCandidates(
+      text,
+      [{ articleId: "1", text: "候選文章", searchScore: null }],
+      h.env,
+    );
+
+    expect(h.run.mock.calls[0][1].max_tokens).toBe(LIMITS.relevanceMaxTokens);
+    expect(JSON.parse(h.run.mock.calls[0][1].messages[1].content).claim).toBe(text);
+  });
+
   it.each([
     // 檢驗 0.65 為門檻（含邊界）：低於門檻不保留，等於或高於門檻且判定為相關才保留
     { score: 0.64, relevant: true, expectedCount: 0 },

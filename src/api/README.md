@@ -30,13 +30,14 @@ middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每�
 - 正常回 HTTP 200、`status: completed`；有可恢復的上游失敗則回 HTTP 200、`status: partial`，原因在 `meta.warnings`。
 - 每次回應有 `X-Request-Id` 與 `Cache-Control: no-store`。API 錯誤含繁體中文 message、固定英文 error code 與 request ID。
 
-| 失敗階段                  | 行為                                                         |
-| ------------------------- | ------------------------------------------------------------ |
-| Safeguard                 | 跳過安全分類並標記 `skipped` 與警告；設定錯誤仍回 HTTP 502   |
-| Cofacts search／relevance | 一律 HTTP 502，不因已抓到 URL 文字而繼續                     |
-| Cofacts detail            | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                  |
-| URL                       | 保留警告，Cofacts 照常；查無 Cofacts 證據時交 Gemma 常識判斷 |
-| Gemma／模型 JSON 驗證     | HTTP 502，不自行生成替代分數                                 |
+| 失敗階段              | 行為                                                         |
+| --------------------- | ------------------------------------------------------------ |
+| Safeguard             | 跳過安全分類並標記 `skipped` 與警告；設定錯誤仍回 HTTP 502   |
+| Cofacts search        | HTTP 502，不因已抓到 URL 文字而繼續                          |
+| Relevance             | 保留全部候選、不產生相關性分數，標記警告後繼續               |
+| Cofacts detail        | 單筆文章失敗跳過，記錄文章 ID，其他證據繼續                  |
+| URL                   | 保留警告，Cofacts 照常；查無 Cofacts 證據時交 Gemma 常識判斷 |
+| Gemma／模型 JSON 驗證 | HTTP 502，不自行生成替代分數                                 |
 
 ## Safeguard 呼叫契約
 
@@ -118,11 +119,11 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 ## 證據契約
 
-候選搜尋預設取 15 筆，只查 `id`、`text`、`score`；保留 `searchScore`，不依此篩掉文章。初篩一次呼叫 `gpt-oss-20b`，每篇送入最多 3,000 個 UTF-16 code unit，不附搜尋分數。輸出必須涵蓋所有候選 ID，且不得新增或重複。只有 `relevant: true` 且 `relevance >= 0.65` 才保留，依相關性排序、最多 5 篇。
+候選搜尋預設取 15 筆，只查 `id`、`text`、`score`；保留 `searchScore`，不依此篩掉文章。初篩一次呼叫 `gpt-oss-20b`，每篇送入最多 3,000 個 UTF-16 code unit，不附搜尋分數，`max_tokens` 設為 16,384，讓模型推理後仍有空間回傳完整 JSON。輸出必須涵蓋所有候選 ID，且不得新增或重複。只有 `relevant: true` 且 `relevance >= 0.65` 才保留，依相關性排序、最多 5 篇。模型呼叫、逾時或輸出驗證失敗時改為 fail-open：全部候選繼續進入詳細證據階段，`meta.warnings` 加入 `relevance`，且不產生 `relevance_score`；因此結果為 `partial`，也不會寫入結果快取。
 
 若首頁的「通過相關性初篩數」一直是 1，先查看 `meta.cache.status`：`hit` 代表沿用先前結果，不會重新初篩。未命中快取時，可用相同 request ID 的 `relevance` log 排查：`candidate_count` 是候選數；`article_ids`、`relevant_flags`、`relevance_scores` 按相同索引對應每篇文章；`relevance_threshold` 與 `selection_limit` 是分數門檻與保留上限；`selected_count` 及 `selected_article_ids` 是實際採用結果。此數字以文章計算，一篇文章可以提供多則查核回覆。診斷不記錄文章內容或模型的自由文字理由。
 
-若每篇相關性分數都相同，可進一步對照兩個紀錄點：`relevance_model_request` 的 `distinct_text_count` 是截斷後送入模型的不同本文數量，`source_text_lengths` 與 `sent_text_lengths` 顯示截斷前後的 UTF-16 長度；`relevance_model_response` 的 `model_relevance_scores` 是模型 JSON 剛解析後、尚未依 ID 對應或套用門檻排序的數值，非數值以 `null` 記錄後仍會驗證失敗。各紀錄的 `article_ids` 與分數依相同索引對應，但模型可以改變文章順序，跨紀錄應以 ID 比對。若此處已全部同分，應追查模型輸入及輸出；不能單憑同分推定為並發污染。初篩只呼叫一次模型並等待結果，各請求使用獨立的區域陣列與 Map。`tests/relevance-isolation.test.ts` 驗證十五筆不同分數、亂序回應及同時請求反序完成的隔離行為。命中結果快取時不會產生這些模型紀錄；診斷修改本身不會使既有快取失效。
+若每篇相關性分數都相同，可進一步對照兩個紀錄點：`relevance_model_request` 的 `distinct_text_count` 是截斷後送入模型的不同本文數量，`source_text_lengths` 與 `sent_text_lengths` 顯示截斷前後的 UTF-16 長度；`relevance_model_response` 的 `model_relevance_scores` 是模型 JSON 剛解析後、尚未依 ID 對應或套用門檻排序的數值，非數值以 `null` 記錄後仍會驗證失敗。各紀錄的 `article_ids` 與分數依相同索引對應，但模型可以改變文章順序，跨紀錄應以 ID 比對。若此處已全部同分，應追查模型輸入及輸出；不能單憑同分推定為並發污染。初篩失敗時會另有 `relevance_fallback`，只記錄放行的文章 ID 與數量，不記錄使用者或文章內容。初篩只呼叫一次模型並等待結果，各請求使用獨立的區域陣列與 Map。`tests/relevance-isolation.test.ts` 驗證十五筆不同分數、亂序回應及同時請求反序完成的隔離行為。命中結果快取時不會產生這些模型紀錄；診斷修改本身不會使既有快取失效。
 
 詳細資料以文章為單位平行取得。人工與 AI 回覆分別標記 `cofacts-human`／`cofacts-ai`，每篇各最多 10 則，AI 只取 `SUCCESS`。`retrievalScore` 與 `relevanceScore` 分開保存。人工 reply 的 `reference`、hyperlinks 與原始文章的 references 分開；原始訊息出處不會充當人工查核引文，也不會送入 Gemma。
 

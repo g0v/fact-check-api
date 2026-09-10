@@ -1327,9 +1327,9 @@ async function factCheck(input: FactCheckInput) {
 
 ## gpt-oss relevance filter fail
 
-- [ ] 不直接把未過濾 Cofacts candidates 送 Gemma
-- [ ] 建議回 partial / upstream error
-- [ ] 避免重新引入 retrieval noise
+- [ ] fail-open，保留全部 Cofacts candidates 進入詳細證據階段
+- [ ] 回應標記 partial / upstream warning
+- [ ] 不虛構 relevanceScore；以 warning 明確標示 retrieval noise 風險
 
 ## Cofacts Detail fail
 

@@ -111,23 +111,25 @@ describe("查核結果快取", () => {
     expect(h.run).toHaveBeenCalledTimes(4);
   });
 
-  it.each([{ decision: "block" }, { urlFailure: true }, { safetyFailure: true }])(
-    "封鎖與部分失敗不寫入快取：%j",
-    async (options) => {
-      const h = harness(options);
-      const { cache } = memoryCache();
-      for (let n = 0; n < 2; n++)
-        await cachedFactCheck({ ...input, url: "https://example.org" }, h.env, {
-          ...h,
-          cache,
-          origin,
-        });
-      expect(cache.put).not.toHaveBeenCalled();
-      expect(
-        h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
-      ).toHaveLength(2);
-    },
-  );
+  it.each([
+    { decision: "block" },
+    { urlFailure: true },
+    { safetyFailure: true },
+    { relevanceFailure: true },
+  ])("封鎖與部分失敗不寫入快取：%j", async (options) => {
+    const h = harness(options);
+    const { cache } = memoryCache();
+    for (let n = 0; n < 2; n++)
+      await cachedFactCheck({ ...input, url: "https://example.org" }, h.env, {
+        ...h,
+        cache,
+        origin,
+      });
+    expect(cache.put).not.toHaveBeenCalled();
+    expect(
+      h.fetcher.mock.calls.filter(([url]) => String(url).includes("openrouter.ai")),
+    ).toHaveLength(2);
+  });
 
   it("上游失敗不寫入；無證據的常識判斷結果仍可快取且保留下修後的 confidence", async () => {
     const failed = harness({ synthesisFailure: true });

@@ -138,7 +138,17 @@ export async function factCheck(
         selected_article_ids: selected.map((item) => item.articleId),
       });
     } catch {
-      throw upstreamError("relevance");
+      // 初篩只有排除不相關候選的用途；模型失敗時保留全部候選，避免中斷查核主流程。
+      // fallback 不產生 relevanceScore，讓下游與 API 使用者能區分模型判定和故障放行。
+      warn("relevance");
+      selected = candidates.map((candidate) => ({ ...candidate }));
+      log({
+        event: "relevance_fallback",
+        request_id: requestId,
+        candidate_count: candidates.length,
+        article_ids: candidates.map((item) => item.articleId),
+        selected_count: selected.length,
+      });
     }
   }
   meta.cofacts_relevant = selected.length;

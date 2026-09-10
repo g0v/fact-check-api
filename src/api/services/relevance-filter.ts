@@ -49,7 +49,7 @@ export async function filterRelevantCandidates(
           messages,
           stream: false,
           temperature: 0,
-          max_tokens: 6_144,
+          max_tokens: LIMITS.relevanceMaxTokens,
           response_format: { type: "json_object" },
         }),
       LIMITS.modelTimeoutMs,

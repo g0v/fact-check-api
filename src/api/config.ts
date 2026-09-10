@@ -20,6 +20,8 @@ export const LIMITS = {
   candidateText: 3_000,
   relevant: 5,
   relevanceThreshold: 0.65,
+  // gpt-oss 的推理與 JSON 回覆共用輸出額度；長篇 claim 須保留足夠空間輸出完整候選清單。
+  relevanceMaxTokens: 16_384,
   evidenceText: 6_000,
   repliesPerArticle: 10,
   urlText: 12_000,

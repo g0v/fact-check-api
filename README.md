@@ -168,7 +168,7 @@ URL 提供查核背景，未經獨立驗證且優先序最低：抓取成功且�
 | `refuted`               | 證據反駁             |
 | `insufficient_evidence` | 證據不足，無法判定   |
 
-`related_checks` 每筆以 `type` 區分 `cofacts_human`／`cofacts_ai`，保留 `text` 與 Cofacts article `url`，有引用來源時附 `reference_url`／`reference_urls`；其他 metadata 包含 `classification`、`retrieval_score` 與 `relevance_score`。
+`related_checks` 每筆以 `type` 區分 `cofacts_human`／`cofacts_ai`，保留 `text` 與 Cofacts article `url`，有引用來源時附 `reference_url`／`reference_urls`；其他 metadata 包含 `classification`、`retrieval_score` 與選填的 `relevance_score`。初篩故障而放行候選時不會虛構 `relevance_score`。
 
 Cofacts 的 `retrieval_score` 只是搜尋排序，不是百分比、機率或相關度；`relevance_score` 才是語意相關程度。兩者都不是真假判斷，不可直接換算 factuality。
 
@@ -221,7 +221,7 @@ HTTP 200 時仍需檢查 `status`：
 | 503  | `BUDGET_UNAVAILABLE`   | 用量控管的 Durable Object 暫時無法使用，稍後重試                   |
 | 500  | `INTERNAL_ERROR`       | 提供 request ID 協助排查                                           |
 
-Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋或語意初篩失敗時一律回 502。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
+Safeguard 無法使用時跳過安全分類、標記 `skipped` 與 partial 繼續查核；缺少金鑰等設定錯誤仍回 502。Gemma 失敗回 502，不自行拼湊分數。Cofacts 搜尋失敗時回 502；語意初篩失敗時保留全部候選、略過 `relevance_score`，標記 partial 後繼續。單篇詳細證據或 URL 抓取失敗時，保留其他資料與警告。
 
 ## 每日 Workers AI 用量上限
 
