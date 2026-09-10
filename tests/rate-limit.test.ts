@@ -123,6 +123,32 @@ describe("同 IP 流量限制", () => {
     expect(fetch).toHaveBeenLastCalledWith("https://rate-limit/?window_ms=5000");
   });
 
+  // 議題 #29：跨來源 POST 前的預檢若計入冷卻，同一次操作的 POST 會被自己的預檢擋成 429。
+  it("OPTIONS 預檢不耗用冷卻視窗，隨後的跨來源 POST 仍放行", async () => {
+    const { namespace, fetch } = rateLimitNamespace();
+    const env = { ...setupUpstream(), RATE_LIMIT_DO: namespace };
+    const headers = { Origin: "https://civic.vtaiwan.tw", "cf-connecting-ip": "203.0.113.7" };
+
+    const preflight = await api.request(
+      "/fact-check",
+      { method: "OPTIONS", headers: { ...headers, "Access-Control-Request-Method": "POST" } },
+      env,
+    );
+    expect(preflight.status).toBe(204);
+    const post = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: claim }),
+      },
+      env,
+    );
+    expect(post.status).toBe(200);
+    // 只有 POST 查詢限流服務；預檢完全不進入限流流程。
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("不同 IP 互不影響冷卻", async () => {
     // 模擬 idFromName 路由：不同 key 各自一顆物件，冷卻互不影響。
     const objects: Record<string, RateLimiterDO> = {};

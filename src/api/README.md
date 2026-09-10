@@ -5,7 +5,7 @@
 ## 閱讀順序
 
 1. `index.ts`：request ID、禁止瀏覽器快取、統一錯誤回應。
-2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `cachedFactCheck()`；`middleware/same-origin.ts` 在讀取 POST 本文前檢查 Origin。
+2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `cachedFactCheck()`；`middleware/origin.ts` 在讀取 POST 本文前檢查 Origin，`middleware/cors.ts` 管理允許清單與 CORS 標頭。
 3. `services/fact-check.ts`：完整流程、平行工作與部分失敗策略。
 4. `services/`：安全分類、候選搜尋、批次初篩、詳細證據、URL 背景、Gemma 綜整。
 5. `prompts/`、`schemas/`、`types/`：模型職責、輸入輸出契約與資料型別。
@@ -14,7 +14,7 @@
 
 ## 同 IP 流量限制
 
-`routes/fact-check.ts` 在輸入驗證與查核流程前，對 `/fact-check` 的 GET／POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
+`routes/fact-check.ts` 在輸入驗證與查核流程前，對 `/fact-check` 的 GET／POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`；OPTIONS 預檢刻意不掛載，否則跨來源前端的預檢會先耗掉冷卻視窗，讓緊接著的 POST 被自己的預檢擋成 429。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
 
 middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每個 per-PoP key 每 10 秒 30 次擋洪水，再由 `RATE_LIMIT_DO` Durable Object 以每個 key 記錄上次通過時間，預設冷卻 3 秒。任一 binding 未提供或檢查失敗時，該層採放行策略，避免限流服務故障誤擋正常請求。
 
@@ -23,7 +23,7 @@ middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每�
 ## 已確認的 MVP 契約
 
 - `text` trim 後必填，最多 10,000 個 Unicode code point；URL 最長 2,048 個 UTF-16 code unit。
-- POST 的 Origin 必須與請求 URL 的 origin 完全一致；跨來源、缺少 Origin 或 `Origin: null` 回 HTTP 403／`FORBIDDEN_ORIGIN`，不呼叫上游。此端點的 OPTIONS 也回 403，不提供跨來源 CORS 授權。
+- POST 的 Origin 必須與請求 URL 的 origin 完全一致，或落在 `middleware/cors.ts` 的允許清單；其餘來源、缺少 Origin 或 `Origin: null` 回 HTTP 403／`FORBIDDEN_ORIGIN`，不呼叫上游。允許清單內的跨來源 OPTIONS 回 204 與 CORS 授權標頭，其他來源的 OPTIONS 仍回 403。
 - POST 必須為 JSON；body 最多 128,000 bytes。URL 選填，拒絕空字串、非 HTTP／HTTPS、內網位址及帶帳號密碼的網址。
 - `allow`／`review` 繼續，`review` 留在 moderation 中；`block` 回 HTTP 200、`status: blocked`，分數與 verdict 為 `null`，不執行下游。分類代碼非空時不得為 `allow`：模型若回 `allow` 且列出任何分類，`parseModeration()` 會改判為 `block`；`review` 帶分類仍屬查核例外，繼續查核。
 - Safeguard 服務失敗（傳輸、逾時、HTTP 錯誤或輸出格式錯誤）時跳過安全分類：`moderation.decision` 由程式標記為 `skipped`、`meta.warnings` 加入 `moderation`，以 `partial` 繼續查核；缺少金鑰的設定錯誤仍回 HTTP 502。`skipped` 不接受來自模型輸出或快取。
@@ -113,7 +113,13 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 ## 瀏覽器來源限制
 
-同源依請求 URL 的協定、主機與連接埠判斷，適用部署網域及本機開發，不新增 secret 或白名單設定。不使用 Referer、Host、X-Forwarded-Host 等標頭替代 Origin，也不允許 `Origin: null`。標準 Origin 不含路徑或尾端斜線。
+同源依請求 URL 的協定、主機與連接埠判斷，適用部署網域及本機開發。不使用 Referer、Host、X-Forwarded-Host 等標頭替代 Origin，也不允許 `Origin: null`。標準 Origin 不含路徑或尾端斜線。
+
+議題 #29 另在 `middleware/cors.ts` 以字面比對維護跨來源允許清單：`https://check.vtaiwan.tw`、`https://civic.vtaiwan.tw`，以及帶連接埠的 `http://localhost`、`http://127.0.0.1` 開發位址。清單寫在程式碼裡，不新增 secret 或環境變數；比對整串 origin，`https://civic.vtaiwan.tw.attacker.test` 這類近似網域不會通過。
+
+清單內的跨來源請求，GET／POST 回應附 `Access-Control-Allow-Origin`（回填來源）、`Vary: Origin` 與 `Access-Control-Expose-Headers: Retry-After, X-Fact-Check-Cache, X-Request-Id`；OPTIONS 預檢回 204 與 `Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type`、`Access-Control-Max-Age: 86400`。任何回應都不送 `Access-Control-Allow-Credentials`：端點不使用 cookie 或登入身分，維持這點才不會把跨來源開放變成 CSRF 面。同源請求不需要 CORS，因此不附上述標頭。
+
+錯誤回應同樣要帶 CORS，否則跨來源前端只讀得到不透明的網路錯誤：`middleware/cors.ts` 的 `factCheckCors` 在 `next()` 之後補標頭，`index.ts` 的 `onError` 對 `/api/fact-check` 的 GET／POST 再補一次，`FORBIDDEN_ORIGIN` 除外。
 
 本站前端以相對 URL 執行 POST fetch，Origin 由瀏覽器設定；不要把金鑰放到前端。CLI 維護測試可明確提供同源 Origin，範例見 README。此限制不驗證呼叫者身分，不能防止非瀏覽器程式自行設定 Origin；GET 保持原有公開行為。
 

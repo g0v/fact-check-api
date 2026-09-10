@@ -422,10 +422,12 @@ describe("Hono GET／POST 介面", () => {
 
   it.each([
     ["https://civic.vtaiwan.tw", true],
+    ["https://check.vtaiwan.tw", true],
     ["http://localhost:5173", true],
     ["http://localhost:4173", true],
     ["http://127.0.0.1:8787", true],
     ["https://localhost:5173", false],
+    ["https://check.vtaiwan.tw.attacker.test", false],
   ])("GET 對指定來源套用 CORS：%s", async (origin, allowed) => {
     const h = harness();
     vi.stubGlobal("fetch", h.fetcher);

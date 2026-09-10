@@ -30,18 +30,18 @@ vp run dev
 
 ## 呼叫 API
 
-| 方法 | 路徑              | 用途                               |
-| ---- | ----------------- | ---------------------------------- |
-| GET  | `/`               | API 使用說明首頁                   |
-| GET  | `/health`         | 回傳 `{"status":"ok"}`，不呼叫上游 |
-| GET  | `/api/fact-check` | 以 query string 傳入參數           |
-| POST | `/api/fact-check` | 限本站同源前端，以 JSON 傳入參數   |
+| 方法 | 路徑              | 用途                                           |
+| ---- | ----------------- | ---------------------------------------------- |
+| GET  | `/`               | API 使用說明首頁                               |
+| GET  | `/health`         | 回傳 `{"status":"ok"}`，不呼叫上游             |
+| GET  | `/api/fact-check` | 以 query string 傳入參數                       |
+| POST | `/api/fact-check` | 限本站同源與允許清單內的前端，以 JSON 傳入參數 |
 
 以下指令使用本機網址；部署後請替換為你的服務位址。
 
-### POST：本站前端以 JSON 查核
+### POST：本站與允許清單前端以 JSON 查核
 
-POST 只接受與本站完全相同的 `Origin`（協定、主機、連接埠均須相同）。請在本站前端使用相對網址，瀏覽器會自動附上 Origin：
+POST 接受與本站完全相同的 `Origin`（協定、主機、連接埠均須相同），以及允許清單內的跨來源前端。請在本站前端使用相對網址，瀏覽器會自動附上 Origin：
 
 ```javascript
 const response = await fetch("/api/fact-check", {
@@ -55,7 +55,19 @@ const result = await response.json();
 console.log(result);
 ```
 
-跨來源、缺少 Origin、`Origin: null` 都回 HTTP 403／`FORBIDDEN_ORIGIN`，且不進入查核流程。此端點的 OPTIONS 預檢也回 403，不回傳 `Access-Control-Allow-*` 標頭；同源瀏覽器呼叫不需要 CORS 預檢。
+允許清單（[議題 #29](https://github.com/g0v/fact-check-api/issues/29)）為 `https://check.vtaiwan.tw`、`https://civic.vtaiwan.tw`，以及本機開發用的 `http://localhost:<port>`、`http://127.0.0.1:<port>`。清單內的跨來源前端直接以絕對網址呼叫即可：
+
+```javascript
+const response = await fetch("https://check.vtaiwan.tw/api/fact-check", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: "非學校型態學生，國中小以下目前沒有普遍補助" }),
+});
+```
+
+瀏覽器會先送 OPTIONS 預檢，端點回 204 與 `Access-Control-Allow-Origin`、`Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type`、`Access-Control-Max-Age: 86400`。回應一律不帶 `Access-Control-Allow-Credentials`，端點不使用 cookie 或登入身分。跨來源可讀取的回應標頭為 `Retry-After`、`X-Fact-Check-Cache`、`X-Request-Id`；錯誤回應同樣附授權標頭，前端能讀到錯誤內容與重試秒數。
+
+清單外的來源、缺少 Origin、`Origin: null` 都回 HTTP 403／`FORBIDDEN_ORIGIN`，且不進入查核流程；其 OPTIONS 預檢同樣回 403，不回傳 `Access-Control-Allow-*` 標頭。同源瀏覽器呼叫不需要預檢，也不會拿到 CORS 標頭。
 
 這是瀏覽器來源限制，不是身分驗證；非瀏覽器程式可自行設定 Origin。GET 仍保留原有公開呼叫行為。CORS 的作用範圍見 [MDN 說明](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)。
 
@@ -214,7 +226,7 @@ HTTP 200 時仍需檢查 `status`：
 | HTTP | error                  | 處理方式                                                           |
 | ---- | ---------------------- | ------------------------------------------------------------------ |
 | 400  | `INVALID_INPUT`        | 修正文字、網址、JSON 格式或請求大小；請求讀取逾時亦會回此錯誤      |
-| 403  | `FORBIDDEN_ORIGIN`     | POST 來源不符本站、未提供 Origin，或發送不支援的 OPTIONS 預檢      |
+| 403  | `FORBIDDEN_ORIGIN`     | POST 或 OPTIONS 的來源不在允許清單、與本站不同源，或未提供 Origin  |
 | 413  | `PAYLOAD_TOO_LARGE`    | 已宣告的本文過大，縮短內容後重試                                   |
 | 429  | `BUDGET_EXCEEDED`      | 今日 Workers AI 用量已達上限；依 `Retry-After` 秒數於 UTC 隔日重試 |
 | 502  | `UPSTREAM_UNAVAILABLE` | 必要上游無法使用；回應另附 `stage`，可稍後重試                     |
@@ -304,7 +316,7 @@ src/
 │   ├── index.ts             # middleware 與錯誤回應
 │   ├── config.ts            # 模型、門檻、資源限制與每日 Workers AI 用量上限
 │   ├── routes/
-│   ├── middleware/          # POST 同源 Origin 檢查
+│   ├── middleware/          # POST Origin 檢查、CORS 與 IP 限流
 │   ├── services/            # 各查核階段與 orchestrator
 │   ├── prompts/
 │   ├── schemas/

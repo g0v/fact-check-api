@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { LIMITS } from "../config";
-import { factCheckGetCors } from "../middleware/cors";
-import { forbiddenOrigin, sameOriginPost } from "../middleware/same-origin";
+import { allowedCrossOrigin, factCheckCors, setFactCheckPreflightCors } from "../middleware/cors";
+import { forbiddenOrigin, postOriginGuard } from "../middleware/origin";
 import { ipRateLimit } from "../middleware/rate-limit";
 import { parseInput } from "../schemas/fact-check";
 import { cachedFactCheck } from "../services/cached-fact-check";
@@ -11,10 +11,11 @@ import { readLimitedText, withTimeout } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
 
-factCheckRoutes.use("/fact-check", factCheckGetCors);
-factCheckRoutes.use("/fact-check", sameOriginPost);
+factCheckRoutes.use("/fact-check", factCheckCors);
+factCheckRoutes.use("/fact-check", postOriginGuard);
 // 議題 #25：GET 與 POST 都以來源 IP 限流；middleware 需在輸入驗證與查核前擋下。
-factCheckRoutes.use("/fact-check", ipRateLimit);
+// 預檢不進入查核流程也不耗用上游資源，若一併計入冷卻視窗，隨後的 POST 會被自己的預檢擋掉。
+factCheckRoutes.on(["GET", "POST"], "/fact-check", ipRateLimit);
 
 async function respond(c: Context<ApiEnv>, input: FactCheckInput) {
   let waitUntil: ((task: Promise<void>) => void) | undefined;
@@ -33,9 +34,12 @@ async function respond(c: Context<ApiEnv>, input: FactCheckInput) {
   return c.json(result);
 }
 
-// 同源請求不需要 CORS 預檢；此端點不提供跨來源授權標頭。
-factCheckRoutes.options("/fact-check", () => {
-  throw forbiddenOrigin();
+// 同源請求不需要 CORS 預檢；只有允許清單內的跨來源才回授權標頭，其餘一律 403。
+factCheckRoutes.options("/fact-check", (c) => {
+  const origin = allowedCrossOrigin(c);
+  if (!origin) throw forbiddenOrigin();
+  setFactCheckPreflightCors(c, origin);
+  return c.body(null, 204);
 });
 
 factCheckRoutes.get("/fact-check", async (c) => {
