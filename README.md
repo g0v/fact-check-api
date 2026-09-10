@@ -89,10 +89,10 @@ curl --get 'http://localhost:5173/api/fact-check' \
 ```bash
 curl --get 'http://localhost:5173/api/fact-check' \
   --data-urlencode 'text=非學校型態學生，國中小以下目前沒有普遍補助' \
-  --data-urlencode 'url=https://civic.vtaiwan.tw/issues/7'
+  --data-urlencode 'url=https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001'
 ```
 
-`--data-urlencode` 會處理中文、空白及特殊字元。內容較長或敏感時建議使用 POST，避免文字出現在網址歷史或 access log。OpenRouter 金鑰只由服務維運者設定，不放進用戶端請求。
+`--data-urlencode` 會把整個欄位值正確編碼，因此背景網址本身的 `?`、`&` 等 query string 字元不會被誤認成 `/api/fact-check` 的參數。內容較長或敏感時建議使用 POST，避免文字出現在網址歷史或 access log。OpenRouter 金鑰只由服務維運者設定，不放進用戶端請求。
 
 ### 輸入限制
 

@@ -19,7 +19,7 @@ const getExample = `curl --get ${shellEndpoint} \\
   --data-urlencode 'text=${claim}'`;
 const urlExample = `curl --get ${shellEndpoint} \\
   --data-urlencode 'text=${claim}' \\
-  --data-urlencode 'url=https://civic.vtaiwan.tw/issues/7'`;
+  --data-urlencode 'url=https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001'`;
 const responseExample = JSON.stringify(
   {
     text: claim,

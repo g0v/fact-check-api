@@ -39,10 +39,16 @@ factCheckRoutes.options("/fact-check", () => {
 });
 
 factCheckRoutes.get("/fact-check", async (c) => {
-  if ((c.req.queries("text")?.length ?? 0) > 1 || (c.req.queries("url")?.length ?? 0) > 1) {
+  // 使用平台標準的 URL parser，讓 url 欄位本身的 query string（例如 ?pcode=...）
+  // 在解碼後仍完整作為單一輸入值；呼叫端應將整個 url 欄位做 percent-encoding。
+  const params = new URL(c.req.url).searchParams;
+  if (params.getAll("text").length > 1 || params.getAll("url").length > 1) {
     throw new ApiError("INVALID_INPUT", "text 與 url 不得重複提供。", 400);
   }
-  const input = parseInput({ text: c.req.query("text"), url: c.req.query("url") });
+  const input = parseInput({
+    text: params.get("text") ?? undefined,
+    url: params.get("url") ?? undefined,
+  });
   return respond(c, input);
 });
 

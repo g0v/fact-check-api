@@ -344,6 +344,22 @@ describe("Hono GET／POST 介面", () => {
   });
 
   it.each([
+    "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001",
+    "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001&flno=1",
+  ])("GET 完整保留背景網址的 query string：%s", async (url) => {
+    const h = harness();
+    vi.stubGlobal("fetch", h.fetcher);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const params = new URLSearchParams({ text: claim, url });
+
+    const response = await api.request(`/fact-check?${params}`, {}, h.env);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ url });
+    expect(h.fetcher.mock.calls.some(([input]) => String(input) === url)).toBe(true);
+  });
+
+  it.each([
     {},
     { text: "   " },
     { text: 2 },

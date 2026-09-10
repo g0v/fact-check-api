@@ -70,6 +70,13 @@ describe("URL SSRF 與資源限制", () => {
     );
   });
 
+  it("正規化時保留 URL query string", () => {
+    expect(
+      validatePublicUrl("https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001&flno=1#section")
+        .href,
+    ).toBe("https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0000001&flno=1");
+  });
+
   function urlFetcher(
     options: {
       address?: string;
