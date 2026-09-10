@@ -8,7 +8,7 @@ import NavBar from "../components/NavBar.vue";
     <h1>關於 Fact Check API</h1>
     <p>
       本站目前只是 Demo，每日 Workers AI 用量有限，預設每日配額為 10,000 neurons（僅供大約 30
-      次查核）。用量會透過 Durable Object 記帳，達到配額後當日便無法繼續查核。
+      次查核）。用量會透過 Durable Object 記錄，達到配額後當日便無法繼續查核。
     </p>
     <p>
       如果要正式使用，請先 fork
