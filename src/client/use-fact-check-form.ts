@@ -39,7 +39,7 @@ export function useFactCheckForm(fetcher: typeof fetch = fetch) {
     }
     pending.value = true;
     try {
-      const response = await fetcher("/api/fact-check", {
+      const response = await fetcher("/api/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: claim, ...(sourceUrl ? { url: sourceUrl } : {}) }),

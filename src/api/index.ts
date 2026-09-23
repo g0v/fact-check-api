@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { demoRoutes } from "./routes/demo";
 import { factCheckRoutes } from "./routes/fact-check";
 import type { ApiEnv } from "./types/fact-check";
 import { setFactCheckCors } from "./middleware/cors";
@@ -21,7 +22,7 @@ api.onError((error, c) => {
   // 被擋下的來源例外：FORBIDDEN_ORIGIN 不得回授權標頭。
   if (
     (c.req.method === "GET" || c.req.method === "POST") &&
-    new URL(c.req.url).pathname === "/api/fact-check" &&
+    ["/api/demo", "/api/fact-check"].includes(new URL(c.req.url).pathname) &&
     !(known && error.code === "FORBIDDEN_ORIGIN")
   )
     setFactCheckCors(c);
@@ -45,3 +46,4 @@ api.onError((error, c) => {
   );
 });
 api.route("/", factCheckRoutes);
+api.route("/", demoRoutes);

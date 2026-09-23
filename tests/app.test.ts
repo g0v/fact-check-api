@@ -15,4 +15,7 @@ describe("既有主程式整合", () => {
   it("掛載 /api/fact-check 的輸入驗證", async () => {
     expect((await app.request("/api/fact-check", {}, {})).status).toBe(400);
   });
+  it("掛載 /api/demo，未設定 core service 時回傳安全錯誤", async () => {
+    expect((await app.request("/api/demo", {}, {})).status).toBe(502);
+  });
 });

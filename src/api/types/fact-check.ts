@@ -93,6 +93,9 @@ export type DurableObjectNamespaceLike = {
     fetch(input: string | URL | Request, init?: RequestInit): Promise<Response>;
   };
 };
+export type ServiceBindingLike = {
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+};
 export type ApiBindings = {
   OPENROUTER_API_KEY?: string;
   // 議題 #9：每日 Workers AI 用量上限（neurons），未設定時採用 BUDGET.dailyNeurons。
@@ -105,6 +108,8 @@ export type ApiBindings = {
   };
   RATE_LIMIT_WINDOW_MS?: string | number;
   RATE_LIMIT_DO?: DurableObjectNamespaceLike;
+  // 將查核 pipeline 委派給獨立的 fact-check-core Worker。
+  FACT_CHECK_CORE?: ServiceBindingLike;
   AI?: {
     run(
       model: string,
