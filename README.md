@@ -36,7 +36,6 @@ vp run dev
 | GET  | `/health`         | 回傳 `{"status":"ok"}`，不呼叫上游             |
 | GET  | `/api/fact-check` | 以 query string 傳入參數                       |
 | POST | `/api/fact-check` | 限本站同源與允許清單內的前端，以 JSON 傳入參數 |
-| GET  | `/api/demo`       | 將 query string 轉送到 `fact-check-core`       |
 | POST | `/api/demo`       | 首頁使用的 service binding 查核入口            |
 
 以下指令使用本機網址；部署後請替換為你的服務位址。
@@ -125,7 +124,7 @@ URL 提供查核背景，未經獨立驗證且優先序最低：抓取成功且�
 
 ## 同 IP 流量限制
 
-`/api/fact-check` 與 `/api/demo` 的 GET／POST 都會依 `cf-connecting-ip` 套用兩層限流：第一層是 Cloudflare 內建的 `RATE_LIMITER` binding，門檻為每個 per-PoP key 10 秒 30 次，用來擋明顯洪水；第二層是 `RATE_LIMIT_DO` Durable Object，對每個 IP key 維持 3 秒冷卻，同一 IP 在冷卻期間最多通過一次查核。任一層未綁定或檢查失敗時，該層會放行，服務仍可繼續提供查核。
+`/api/fact-check` 的 GET／POST 與 `/api/demo` 的 POST 都會依 `cf-connecting-ip` 套用兩層限流：第一層是 Cloudflare 內建的 `RATE_LIMITER` binding，門檻為每個 per-PoP key 10 秒 30 次，用來擋明顯洪水；第二層是 `RATE_LIMIT_DO` Durable Object，對每個 IP key 維持 3 秒冷卻，同一 IP 在冷卻期間最多通過一次查核。任一層未綁定或檢查失敗時，該層會放行，服務仍可繼續提供查核。
 
 超過任一限流層時回 HTTP 429，JSON 的 `error` 為 `RATE_LIMITED`，並附 `Retry-After` header，依冷卻視窗建議稍後重試。冷卻視窗由 `wrangler.jsonc` 的 `vars.RATE_LIMIT_WINDOW_MS` 設定，預設為 `3000` 毫秒（3 秒）；調整此值即可調整第二層的同 IP 間隔。
 

@@ -14,7 +14,7 @@
 
 ## 同 IP 流量限制
 
-`routes/fact-check.ts` 與 `routes/demo.ts` 都在輸入驗證或轉送查核流程前，對各自路由的 GET／POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`；OPTIONS 預檢刻意不掛載，否則跨來源前端的預檢會先耗掉冷卻視窗，讓緊接著的 POST 被自己的預檢擋成 429。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
+`routes/fact-check.ts` 在輸入驗證前對 `/fact-check` 的 GET／POST、`routes/demo.ts` 在轉送前對 `/demo` 的 POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`；OPTIONS 預檢刻意不掛載，否則跨來源前端的預檢會先耗掉冷卻視窗，讓緊接著的 POST 被自己的預檢擋成 429。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
 
 middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每個 per-PoP key 每 10 秒 30 次擋洪水，再由 `RATE_LIMIT_DO` Durable Object 以每個 key 記錄上次通過時間，預設冷卻 3 秒。任一 binding 未提供或檢查失敗時，該層採放行策略，避免限流服務故障誤擋正常請求。
 

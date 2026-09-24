@@ -55,14 +55,33 @@ describe("/api/demo", () => {
       throw new Error("core private diagnostic");
     });
     const response = await api.request(
-      "/demo?text=%E6%B8%AC%E8%A9%A6",
-      { headers: { Origin: "https://civic.vtaiwan.tw" } },
+      "/demo",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://civic.vtaiwan.tw",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: "測試主張" }),
+      },
       environment(FACT_CHECK_CORE),
     );
 
     expect(response.status).toBe(502);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://civic.vtaiwan.tw");
     expect(await response.text()).not.toContain("core private diagnostic");
+  });
+
+  it("不再提供 GET 路由", async () => {
+    const FACT_CHECK_CORE = coreBinding();
+    const response = await api.request(
+      "/demo?text=%E6%B8%AC%E8%A9%A6",
+      {},
+      environment(FACT_CHECK_CORE),
+    );
+
+    expect(response.status).toBe(404);
+    expect(FACT_CHECK_CORE.fetch).not.toHaveBeenCalled();
   });
 
   it("同一 IP 在冷卻視窗內再次請求時回傳 429", async () => {
@@ -74,8 +93,16 @@ describe("/api/demo", () => {
     };
     const request = () =>
       api.request(
-        "/demo?text=%E6%B8%AC%E8%A9%A6",
-        { headers: { "cf-connecting-ip": "203.0.113.7" } },
+        "/demo",
+        {
+          method: "POST",
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": "application/json",
+            "cf-connecting-ip": "203.0.113.7",
+          },
+          body: JSON.stringify({ text: "測試主張" }),
+        },
         env,
       );
 

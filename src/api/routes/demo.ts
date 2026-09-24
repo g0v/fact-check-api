@@ -10,7 +10,7 @@ export const demoRoutes = new Hono<ApiEnv>();
 // demo 是首頁使用的 facade；來源保護、CORS 與限流留在公開 API，查核流程交由 core service。
 demoRoutes.use("/demo", factCheckCors);
 demoRoutes.use("/demo", postOriginGuard);
-demoRoutes.on(["GET", "POST"], "/demo", ipRateLimit);
+demoRoutes.post("/demo", ipRateLimit);
 
 function coreRequest(c: Context<ApiEnv>) {
   const coreUrl = new URL(c.req.url);
@@ -31,9 +31,8 @@ async function proxyToCore(c: Context<ApiEnv>) {
 demoRoutes.options("/demo", (c) => {
   const origin = allowedCrossOrigin(c);
   if (!origin) throw forbiddenOrigin();
-  setFactCheckPreflightCors(c, origin);
+  setFactCheckPreflightCors(c, origin, "POST, OPTIONS");
   return c.body(null, 204);
 });
 
-demoRoutes.get("/demo", proxyToCore);
 demoRoutes.post("/demo", proxyToCore);

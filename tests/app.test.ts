@@ -15,7 +15,19 @@ describe("既有主程式整合", () => {
   it("掛載 /api/fact-check 的輸入驗證", async () => {
     expect((await app.request("/api/fact-check", {}, {})).status).toBe(400);
   });
-  it("掛載 /api/demo，未設定 core service 時回傳安全錯誤", async () => {
-    expect((await app.request("/api/demo", {}, {})).status).toBe(502);
+  it("掛載 /api/demo 的 POST，未設定 core service 時回傳安全錯誤", async () => {
+    expect(
+      (
+        await app.request(
+          "/api/demo",
+          {
+            method: "POST",
+            headers: { Origin: "http://localhost", "Content-Type": "application/json" },
+            body: JSON.stringify({ text: "測試主張" }),
+          },
+          {},
+        )
+      ).status,
+    ).toBe(502);
   });
 });
