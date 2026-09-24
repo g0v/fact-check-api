@@ -27,8 +27,15 @@ function rateLimitNamespace(): ApiBindings["RATE_LIMIT_DO"] {
 }
 
 describe("/api/demo", () => {
-  it("將 POST 本文與 query string 轉送到 core 的 /fact-check", async () => {
-    const FACT_CHECK_CORE = coreBinding();
+  it("轉送 POST 至 core，且成功回應可安全補上 CORS", async () => {
+    // fetch() 回應的 Headers guard 是 immutable，可重現 Cloudflare service binding 回應。
+    const upstream = await fetch(
+      `data:application/json,${encodeURIComponent(
+        JSON.stringify({ status: "completed", feedback: "由 core service 回傳。" }),
+      )}`,
+    );
+    expect(() => upstream.headers.set("X-Test", "不可修改")).toThrow(TypeError);
+    const FACT_CHECK_CORE = coreBinding(async () => upstream);
     const response = await api.request(
       "https://example.test/demo?trace=1",
       {
@@ -44,6 +51,7 @@ describe("/api/demo", () => {
       status: "completed",
       feedback: "由 core service 回傳。",
     });
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:5173");
     const request = vi.mocked(FACT_CHECK_CORE.fetch).mock.calls[0]?.[0] as Request;
     expect(request.url).toBe("https://example.test/fact-check?trace=1");
     expect(request.method).toBe("POST");
@@ -70,6 +78,27 @@ describe("/api/demo", () => {
     expect(response.status).toBe(502);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://civic.vtaiwan.tw");
     expect(await response.text()).not.toContain("core private diagnostic");
+  });
+
+  it("預檢只允許 POST，且不呼叫 core service", async () => {
+    const FACT_CHECK_CORE = coreBinding();
+    const response = await api.request(
+      "/demo",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://check.vtaiwan.tw",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
+      },
+      environment(FACT_CHECK_CORE),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://check.vtaiwan.tw");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("POST, OPTIONS");
+    expect(FACT_CHECK_CORE.fetch).not.toHaveBeenCalled();
   });
 
   it("不再提供 GET 路由", async () => {

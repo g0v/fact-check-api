@@ -51,7 +51,6 @@ describe("首頁表單與結果（不使用瀏覽器自動化）", () => {
     const html = await (await app.request("/", {}, {})).text();
     expect(html).toContain('id="fact-check-app"');
     expect(html).toContain('action="/api/demo" method="post"');
-    expect(html).toContain("POST /api/fact-check");
     expect(html).toContain("fetch(&quot;/api/fact-check&quot;");
     expect(html).toContain('type="module" src="/src/client/home.ts"');
     expect(html).toContain("第一個查核請求");

@@ -103,7 +103,7 @@ async function isRateLimited(env: ApiBindings, key: string, windowMs: number): P
   }
 }
 
-// /api/fact-check 沒有登入身分，只能以來源 IP 當限流 key（同一 NAT 會共用額度）。
+// 公開查核端點沒有登入身分，只能以來源 IP 當限流 key（同一 NAT 會共用額度）。
 // 取不到 cf-connecting-ip（本機 wrangler dev / Node 測試）時不限流，以免誤擋正常使用者。
 export const ipRateLimit: MiddlewareHandler<{ Bindings: ApiBindings }> = async (c, next) => {
   const ip = c.req.header("cf-connecting-ip");
