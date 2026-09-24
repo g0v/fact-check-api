@@ -5,7 +5,7 @@
 ## 閱讀順序
 
 1. `index.ts`：request ID、禁止瀏覽器快取、統一錯誤回應。
-2. `routes/fact-check.ts`：GET／POST 共用輸入驗證及 `cachedFactCheck()`；`middleware/origin.ts` 在讀取 POST 本文前檢查 Origin，`middleware/cors.ts` 管理允許清單與 CORS 標頭。
+2. `routes/fact-check.ts`：既有 GET／POST 查核流程；`routes/demo.ts`：首頁使用、經 service binding 委派給 core 的 POST facade；`middleware/origin.ts` 與 `middleware/cors.ts` 管理來源限制及 CORS 標頭。
 3. `services/fact-check.ts`：完整流程、平行工作與部分失敗策略。
 4. `services/`：安全分類、候選搜尋、批次初篩、詳細證據、URL 背景、Gemma 綜整。
 5. `prompts/`、`schemas/`、`types/`：模型職責、輸入輸出契約與資料型別。
@@ -14,7 +14,7 @@
 
 ## 同 IP 流量限制
 
-`routes/fact-check.ts` 在輸入驗證與查核流程前，對 `/fact-check` 的 GET／POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`；OPTIONS 預檢刻意不掛載，否則跨來源前端的預檢會先耗掉冷卻視窗，讓緊接著的 POST 被自己的預檢擋成 429。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
+`routes/fact-check.ts` 在輸入驗證前對 `/fact-check` 的 GET／POST、`routes/demo.ts` 在轉送前對 `/demo` 的 POST 掛載 `middleware/rate-limit.ts` 的 `ipRateLimit`；OPTIONS 預檢刻意不掛載，否則跨來源前端的預檢會先耗掉冷卻視窗，讓緊接著的 POST 被自己的預檢擋成 429。限流 key 取自 `cf-connecting-ip`：IPv4 使用完整 IP；IPv6 正規化並收斂至 `/64` 前綴，避免同一網段輪換位址繞過額度。若沒有 `cf-connecting-ip`（例如本機 Wrangler dev 或 Node 測試），直接放行，不猜測或代用其他標頭。
 
 middleware 依序檢查兩層：Cloudflare 內建 `RATE_LIMITER` binding 以每個 per-PoP key 每 10 秒 30 次擋洪水，再由 `RATE_LIMIT_DO` Durable Object 以每個 key 記錄上次通過時間，預設冷卻 3 秒。任一 binding 未提供或檢查失敗時，該層採放行策略，避免限流服務故障誤擋正常請求。
 
@@ -117,11 +117,11 @@ Log 新增 `event: "usage"`（各階段的模型、token 數、是否估算與 n
 
 議題 #29 另在 `middleware/cors.ts` 以字面比對維護跨來源允許清單：`https://check.vtaiwan.tw`、`https://civic.vtaiwan.tw`，以及帶連接埠的 `http://localhost`、`http://127.0.0.1` 開發位址。清單寫在程式碼裡，不新增 secret 或環境變數；比對整串 origin，`https://civic.vtaiwan.tw.attacker.test` 這類近似網域不會通過。
 
-清單內的跨來源請求，GET／POST 回應附 `Access-Control-Allow-Origin`（回填來源）、`Vary: Origin` 與 `Access-Control-Expose-Headers: Retry-After, X-Fact-Check-Cache, X-Request-Id`；OPTIONS 預檢回 204 與 `Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type`、`Access-Control-Max-Age: 86400`。任何回應都不送 `Access-Control-Allow-Credentials`：端點不使用 cookie 或登入身分，維持這點才不會把跨來源開放變成 CSRF 面。同源請求不需要 CORS，因此不附上述標頭。
+`/api/fact-check` 的 GET／POST 與 `/api/demo` 的 POST 回應，會對清單內的跨來源附 `Access-Control-Allow-Origin`（回填來源）、`Vary: Origin` 與 `Access-Control-Expose-Headers: Retry-After, X-Fact-Check-Cache, X-Request-Id`。OPTIONS 預檢皆回 204、`Access-Control-Allow-Headers: Content-Type` 與 `Access-Control-Max-Age: 86400`；`/api/fact-check` 的 `Access-Control-Allow-Methods` 為 `GET, POST, OPTIONS`，`/api/demo` 僅為 `POST, OPTIONS`。任何回應都不送 `Access-Control-Allow-Credentials`：端點不使用 cookie 或登入身分，維持這點才不會把跨來源開放變成 CSRF 面。同源請求不需要 CORS，因此不附上述標頭。
 
-錯誤回應同樣要帶 CORS，否則跨來源前端只讀得到不透明的網路錯誤：`middleware/cors.ts` 的 `factCheckCors` 在 `next()` 之後補標頭，`index.ts` 的 `onError` 對 `/api/fact-check` 的 GET／POST 再補一次，`FORBIDDEN_ORIGIN` 除外。
+錯誤回應同樣要帶 CORS，否則跨來源前端只讀得到不透明的網路錯誤：`middleware/cors.ts` 的 `factCheckCors` 在 `next()` 之後補標頭，`index.ts` 的 `onError` 對 `/api/fact-check` 的 GET／POST 與 `/api/demo` 的 POST 再補一次，`FORBIDDEN_ORIGIN` 除外。
 
-本站前端以相對 URL 執行 POST fetch，Origin 由瀏覽器設定；不要把金鑰放到前端。CLI 維護測試可明確提供同源 Origin，範例見 README。此限制不驗證呼叫者身分，不能防止非瀏覽器程式自行設定 Origin；GET 保持原有公開行為。
+本站首頁以相對 URL 對 `/api/demo` 執行 POST fetch，Origin 由瀏覽器設定；不要把金鑰放到前端。CLI 維護測試可明確提供同源 Origin，範例見 README。此限制不驗證呼叫者身分，不能防止非瀏覽器程式自行設定 Origin；只有 `/api/fact-check` 的 GET 保持原有公開行為。
 
 ## 證據契約
 

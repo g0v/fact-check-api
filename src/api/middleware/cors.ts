@@ -10,7 +10,7 @@ const PREFLIGHT_MAX_AGE_SECONDS = 86_400;
 // 跨來源 JS 預設只讀得到 CORS 安全標頭；限流重試與診斷資訊需明確開放。
 const EXPOSED_HEADERS = "Retry-After, X-Fact-Check-Cache, X-Request-Id";
 
-// 議題 #29：允許 check.vtaiwan.tw、civic.vtaiwan.tw 與本機開發前端跨來源呼叫 /api/fact-check。
+// 議題 #29：允許正式站與本機開發前端跨來源呼叫公開查核端點。
 export function isAllowedCrossOrigin(origin: string): boolean {
   if (ALLOWED_PRODUCTION_ORIGINS.includes(origin)) return true;
   try {
@@ -41,10 +41,14 @@ export function setFactCheckCors(c: Context<ApiEnv>) {
 }
 
 // 跨來源預檢回應；不提供 Access-Control-Allow-Credentials，端點不使用 cookie 或身分。
-export function setFactCheckPreflightCors(c: Context<ApiEnv>, origin: string) {
+export function setFactCheckPreflightCors(
+  c: Context<ApiEnv>,
+  origin: string,
+  allowedMethods = "GET, POST, OPTIONS",
+) {
   c.header("Access-Control-Allow-Origin", origin);
   c.header("Vary", "Origin");
-  c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  c.header("Access-Control-Allow-Methods", allowedMethods);
   c.header("Access-Control-Allow-Headers", "Content-Type");
   c.header("Access-Control-Max-Age", String(PREFLIGHT_MAX_AGE_SECONDS));
 }

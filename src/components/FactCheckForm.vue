@@ -33,12 +33,11 @@ async function submit() {
         <p class="eyebrow">直接試用</p>
         <h2 id="try-title">查核一段文字</h2>
       </div>
-      <span class="method">POST /api/fact-check</span>
     </div>
     <p class="form-intro">
       輸入你想確認的具體主張，也可以附上背景網址。結果會保留證據、原始分數與不確定性。
     </p>
-    <form action="/api/fact-check" method="post" @submit.prevent="submit" :aria-busy="pending">
+    <form action="/api/demo" method="post" @submit.prevent="submit" :aria-busy="pending">
       <label for="check-text">待查核文字 <span class="required-label">必填</span></label>
       <textarea
         id="check-text"

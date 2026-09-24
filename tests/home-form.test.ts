@@ -50,7 +50,8 @@ describe("首頁表單與結果（不使用瀏覽器自動化）", () => {
   it("SSR 保留說明與表單，僅首頁載入互動入口", async () => {
     const html = await (await app.request("/", {}, {})).text();
     expect(html).toContain('id="fact-check-app"');
-    expect(html).toContain('action="/api/fact-check" method="post"');
+    expect(html).toContain('action="/api/demo" method="post"');
+    expect(html).toContain("fetch(&quot;/api/fact-check&quot;");
     expect(html).toContain('type="module" src="/src/client/home.ts"');
     expect(html).toContain("第一個查核請求");
     expect(html).toMatch(/<button[^>]*disabled/);
@@ -70,7 +71,7 @@ describe("首頁表單與結果（不使用瀏覽器自動化）", () => {
     form.text.value = "  測試主張  ";
     form.url.value = "   ";
     await form.submit();
-    expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/fact-check", {
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/demo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "測試主張" }),

@@ -5,6 +5,13 @@
   "compatibility_date": "2026-04-17",
   "ai": { "binding": "AI" },
   "assets": { "directory": "./public/", "binding": "ASSETS" },
+  "services": [
+    {
+      "binding": "FACT_CHECK_CORE",
+      "service": "fact-check-core",
+      "remote": true,
+    },
+  ],
   // 議題 #9：每日 Workers AI 用量上限（neurons），預設等於免費額度；調整此值不需改程式。
   "vars": {
     // "DAILY_NEURON_BUDGET": "10000",
