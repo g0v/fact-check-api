@@ -1,12 +1,8 @@
-# x402 收款錢包（預設 Base mainnet）
-PAY_TO=0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB
-X402_NETWORK=eip155:8453
-X402_PRICE=$0.05
-
-# Facilitator；Base Sepolia 可使用公開 x402.org facilitator，mainnet 請改用 production facilitator。
-FACILITATOR_URL=https://www.x402.org/facilitator
+# 只在本機填入敏感的 facilitator 憑證；公開付款設定位於 wrangler.jsonc 的 vars。
 FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
-
-# 若 production facilitator 使用 Coinbase CDP，可填入 API 憑證（依 facilitator 要求設定）。
 CDP_API_KEY_ID=your-cdp-api-key-id
 CDP_API_KEY_SECRET=your-cdp-api-key-secret
+
+# 本機 Base Sepolia 測試可取消註解；正式預設值仍由 wrangler.jsonc vars 提供。
+# X402_NETWORK=eip155:84532
+# FACILITATOR_URL=https://www.x402.org/facilitator

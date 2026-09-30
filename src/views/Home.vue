@@ -86,7 +86,9 @@ const verdicts = [
         </div>
         <p class="endpoint-note">同樣需要付款；query string 會轉成 core 的 POST JSON。</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/demo</code></div>
-        <p class="endpoint-note">首頁使用的免費入口，保留 Origin guard、CORS 與 IP 限流。</p>
+        <p class="endpoint-note">
+          首頁使用的免費入口，保留 Origin guard、CORS 與 IP 限流（每 IP 60 秒一次）。
+        </p>
         <div class="endpoint-footer">
           <span>服務狀態</span
           ><a href="/health"><code>GET /health</code> <span aria-hidden="true">↗</span></a>
@@ -131,7 +133,8 @@ const verdicts = [
           <p class="note">
             付費端點允許寬鬆跨來源 CORS，預檢允許 <code>PAYMENT-SIGNATURE</code> 與
             <code>X-PAYMENT</code>。免費 <code>/api/demo</code> 仍只接受本站與既有允許清單來源，
-            並保留 Origin guard、CORS 與 IP 限流。
+            並保留 Origin guard、CORS 與 IP 限流；預設每個 IP 每 60 秒一次，可由
+            <code>RATE_LIMIT_WINDOW_MS</code> 調整。
           </p>
           <details class="code-details">
             <summary>使用 GET 呼叫</summary>

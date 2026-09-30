@@ -93,11 +93,27 @@ describe("/api/fact-check x402 閘門", () => {
     const required = await requiredPayment(core);
 
     expect(required.accepts[0]).toMatchObject({ payTo, network, amount: "50000" });
-    expect(required.resource.description).toContain("每次呼叫收取 0.05 USDC");
+    expect(required.resource.description).toContain("每次呼叫收取 $0.05 USDC");
     expect(required.resource.description).toContain(payTo);
     expect(required.resource.description).toContain(network);
     expect(required.resource.description).toContain("PAYMENT-SIGNATURE");
     expect(core.fetch).not.toHaveBeenCalled();
+  });
+
+  it("付款說明會使用實際設定的價格", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ ok: true }));
+    const response = await api.request(
+      "/fact-check?text=%E6%B8%AC%E8%A9%A6",
+      {},
+      environment(core, { X402_PRICE: "$0.12" }),
+    );
+
+    expect(response.status).toBe(402);
+    const required = decodePaymentRequiredHeader(response.headers.get("PAYMENT-REQUIRED")!);
+    expect(required.accepts[0]).toMatchObject({ amount: "120000" });
+    expect(required.resource.description).toContain("每次呼叫收取 $0.12 USDC");
   });
 
   it("付費端點預檢允許付款標頭並 expose x402 回應標頭", async () => {

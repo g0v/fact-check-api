@@ -5,7 +5,7 @@ export const LIMITS = {
   fetchTimeoutMs: 10_000,
 } as const;
 
-// demo 端點的流量限制；付費 fact-check 端點由 x402 負責付款驗證。
+// 議題 #37：demo 是唯一免費入口，預設每個 IP 每 60 秒最多一次；可由 RATE_LIMIT_WINDOW_MS 覆寫。
 export const RATE_LIMIT = {
-  windowMs: 3_000,
+  windowMs: 60_000,
 } as const;

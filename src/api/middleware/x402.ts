@@ -26,8 +26,8 @@ class StaticSupportFacilitatorClient extends HTTPFacilitatorClient {
   }
 }
 
-const DESCRIPTION = (payTo: string, network: string) =>
-  `這是 fact-check-api 的付費查核 API。每次呼叫收取 0.05 USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE（或 X-PAYMENT）標頭，並以相同請求重試。`;
+const DESCRIPTION = (payTo: string, network: string, price: string) =>
+  `這是 fact-check-api 的付費查核 API。每次呼叫收取 ${price} USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE（或 X-PAYMENT）標頭，並以相同請求重試。`;
 
 function configuredValue(value: string | undefined, fallback: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -68,33 +68,37 @@ function facilitator(env: ApiBindings, network: Network) {
   );
 }
 
+const middlewareCache = new WeakMap<ApiBindings, MiddlewareHandler<ApiEnv>>();
+
 export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler<ApiEnv> {
+  const cached = middlewareCache.get(env);
+  if (cached) return cached;
   const payTo = configuredValue(env.PAY_TO, DEFAULT_PAY_TO);
   const network = configuredValue(env.X402_NETWORK, DEFAULT_NETWORK) as Network;
   const price = configuredValue(env.X402_PRICE, DEFAULT_PRICE);
   const routes = {
     "GET /fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
-      description: DESCRIPTION(payTo, network),
+      description: DESCRIPTION(payTo, network, price),
       mimeType: "application/json",
     },
     "POST /fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
-      description: DESCRIPTION(payTo, network),
+      description: DESCRIPTION(payTo, network, price),
       mimeType: "application/json",
     },
     "GET /api/fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
-      description: DESCRIPTION(payTo, network),
+      description: DESCRIPTION(payTo, network, price),
       mimeType: "application/json",
     },
     "POST /api/fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
-      description: DESCRIPTION(payTo, network),
+      description: DESCRIPTION(payTo, network, price),
       mimeType: "application/json",
     },
   };
-  return paymentMiddlewareFromConfig(
+  const middleware = paymentMiddlewareFromConfig(
     routes,
     facilitator(env, network),
     [{ network, server: new ExactEvmScheme() }],
@@ -102,6 +106,8 @@ export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler
     undefined,
     true,
   );
+  middlewareCache.set(env, middleware);
+  return middleware;
 }
 
 export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) => {

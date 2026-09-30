@@ -142,4 +142,32 @@ describe("/api/demo", () => {
     expect(limited.headers.get("Retry-After")).toBe("5");
     expect(FACT_CHECK_CORE.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("未設定覆寫時免費 demo 預設每個 IP 每 60 秒一次", async () => {
+    const FACT_CHECK_CORE = coreBinding();
+    const env = {
+      ...environment(FACT_CHECK_CORE),
+      RATE_LIMIT_DO: rateLimitNamespace(),
+    };
+    const request = () =>
+      api.request(
+        "/demo",
+        {
+          method: "POST",
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": "application/json",
+            "cf-connecting-ip": "198.51.100.8",
+          },
+          body: JSON.stringify({ text: "測試主張" }),
+        },
+        env,
+      );
+
+    expect((await request()).status).toBe(200);
+    const limited = await request();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
+    expect(FACT_CHECK_CORE.fetch).toHaveBeenCalledTimes(1);
+  });
 });

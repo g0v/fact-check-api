@@ -30,16 +30,26 @@ cp .dev.vars.example .dev.vars
 vp run dev
 ```
 
-請只在本機 `.dev.vars` 設定憑證，不要提交該檔案；`.dev.vars.example` 只放 placeholder。最小設定如下：
+公開付款設定放在 `wrangler.jsonc` 的 `vars`：`PAY_TO` 是公開收款錢包，預設
+`X402_NETWORK=eip155:8453`（Base mainnet）、`X402_PRICE=$0.05`，以及預設的
+`FACILITATOR_URL=https://www.x402.org/facilitator`。demo 的公開預設限流也在 vars 設為
+`RATE_LIMIT_WINDOW_MS=60000`。請依部署環境直接修改這些公開值。
+
+本機 `.dev.vars` 只放敏感憑證，不要提交該檔案；`.dev.vars.example` 已提供 placeholder：
 
 ```dotenv
-PAY_TO=0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB
-X402_NETWORK=eip155:8453
-X402_PRICE=$0.05
-FACILITATOR_URL=https://www.x402.org/facilitator
+FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
+CDP_API_KEY_ID=your-cdp-api-key-id
+CDP_API_KEY_SECRET=your-cdp-api-key-secret
+
+# 本機 Base Sepolia 測試時才取消註解：
+# X402_NETWORK=eip155:84532
+# FACILITATOR_URL=https://www.x402.org/facilitator
 ```
 
-`wrangler.jsonc` 已設定 `FACT_CHECK_CORE` remote service binding。部署環境請在 Cloudflare Workers Variables／Secrets 設定相同變數；不要把 facilitator 或 CDP secret 放進前端程式碼。
+`wrangler.jsonc` 也已設定 `FACT_CHECK_CORE` remote service binding。公開 x402.org facilitator
+僅支援 Base Sepolia；Base mainnet 上線前請把 `FACILITATOR_URL` 改成 production facilitator，
+並只透過 Cloudflare Secrets 注入所需憑證；不要把 facilitator 或 CDP secret 放進前端程式碼。
 
 ## API
 
@@ -66,7 +76,10 @@ const response = await fetch("/api/demo", {
 const result = await response.json();
 ```
 
-`/api/demo` 的 POST Origin guard、正式來源 CORS 與 `cf-connecting-ip` 兩層限流不變。它不是付款驗證或身分驗證；請勿把 demo 當成付費 API 的替代入口。
+`/api/demo` 的 POST Origin guard、正式來源 CORS 仍維持；它是唯一免費入口，預設每個 IP
+每 60 秒最多一次，另有 Cloudflare `RATE_LIMITER` 每 10 秒 30 次的洪水層。可在
+`wrangler.jsonc` 的 `RATE_LIMIT_WINDOW_MS` vars 覆寫精準冷卻時間。demo 不是付款驗證或身分驗證，
+請勿把它當成付費 API 的替代入口。
 
 ## x402 付款
 

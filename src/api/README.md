@@ -39,10 +39,12 @@ service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILA
 
 - POST `Origin` guard：同源或正式來源／本機來源清單才允許。
 - 既有來源回填 CORS 與預檢處理。
-- `RATE_LIMITER` + `RATE_LIMIT_DO` 的 IP 流量限制。
+- `RATE_LIMITER` + `RATE_LIMIT_DO` 的 IP 流量限制；精準冷卻預設每個 IP 每 60 秒一次。
 - POST body 原樣轉成 core `/fact-check` request。
 
-這些守護只屬於免費 demo；付費查核完全由 x402 負責付款，不能把 demo 的 Origin 或 IP 限制套回付費路由。
+`RATE_LIMITER` 仍是每 10 秒 30 次的洪水層；`RATE_LIMIT_WINDOW_MS` 可覆寫 60 秒的
+`RATE_LIMIT_DO` 冷卻時間。這些守護只屬於免費 demo；付費查核完全由 x402 負責付款，
+不能把 demo 的 Origin 或 IP 限制套回付費路由。
 
 ## 輸入限制與錯誤
 

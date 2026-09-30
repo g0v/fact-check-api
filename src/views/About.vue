@@ -12,8 +12,9 @@ import NavBar from "../components/NavBar.vue";
       binding 呼叫獨立的 fact-check-core Worker。
     </p>
     <p>
-      首頁表單仍使用免費的 <code>/api/demo</code>，保留 Origin guard、CORS 與 IP
-      限流。付費端點預設使用 Base mainnet；整合測試可切換到 Base Sepolia。
+      首頁表單仍使用免費的 <code>/api/demo</code>，保留 Origin guard、CORS 與 IP 限流（預設每個 IP
+      每 60 秒一次，可由 <code>RATE_LIMIT_WINDOW_MS</code> 覆寫）。付費端點預設使用 Base
+      mainnet；整合測試可切換到 Base Sepolia。
     </p>
     <h2>自行部署</h2>
     <p>
