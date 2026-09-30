@@ -6,9 +6,14 @@ const props = defineProps<{ origin: string }>();
 const claim = "非學校型態學生，國中小以下目前沒有普遍補助";
 const endpoint = `${props.origin}/api/fact-check`;
 const shellEndpoint = `'${endpoint.replace(/'/g, "'\\''")}'`;
-const postExample = `const response = await fetch("/api/fact-check", {
+const postExample = `// 第一次請求會回 402；用錢包依 PAYMENT-REQUIRED 產生簽章
+const paymentSignature = await wallet.createPaymentSignature(/* PAYMENT-REQUIRED */);
+const response = await fetch("/api/fact-check", {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    "PAYMENT-SIGNATURE": paymentSignature
+  },
   body: JSON.stringify({
     text: "${claim}"
   })
@@ -73,13 +78,15 @@ const verdicts = [
         </div>
       </div>
       <div class="endpoint-panel" aria-label="API 端點一覽">
-        <p class="panel-label">一個查核端點，兩種呼叫方式</p>
+        <p class="panel-label">付費查核與免費入口</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/fact-check</code></div>
-        <p class="endpoint-note">限本站與允許清單內的前端，以 JSON 傳入文字與選填網址。</p>
+        <p class="endpoint-note">x402 付費 API：每次呼叫 0.05 USDC，付款後轉送 fact-check-core。</p>
         <div class="endpoint-row">
           <span class="method method-get">GET</span><code>/api/fact-check</code>
         </div>
-        <p class="endpoint-note">以 query string 傳入相同參數。</p>
+        <p class="endpoint-note">同樣需要付款；query string 會轉成 core 的 POST JSON。</p>
+        <div class="endpoint-row"><span class="method">POST</span><code>/api/demo</code></div>
+        <p class="endpoint-note">首頁使用的免費入口，保留 Origin guard、CORS 與 IP 限流。</p>
         <div class="endpoint-footer">
           <span>服務狀態</span
           ><a href="/health"><code>GET /health</code> <span aria-hidden="true">↗</span></a>
@@ -97,7 +104,7 @@ const verdicts = [
           <a href="#parameters"><span>02</span>輸入參數</a>
           <a href="#response"><span>03</span>讀懂回應</a>
           <a href="#errors"><span>04</span>狀態與錯誤</a>
-          <a href="#pipeline"><span>05</span>查核如何進行</a>
+          <a href="#payment"><span>05</span>x402 付款流程</a>
           <a href="#self-host"><span>06</span>自行架設</a>
         </nav>
       </aside>
@@ -107,22 +114,24 @@ const verdicts = [
           <p class="section-number">01 / 開始呼叫</p>
           <h2 id="quickstart-title">第一個查核請求</h2>
           <p>
-            下方範例供本站前端使用，也可在本站頁面的開發者工具 Console 執行。將
-            <code>text</code> 換成你要查核的具體主張；呼叫前，服務維運者需先完成模型設定。
+            `/api/fact-check` 是 x402 付費 API，每次查核收取 0.05 USDC。第一次呼叫會回
+            <code>402</code>；請用支援 x402 的錢包依 <code>PAYMENT-REQUIRED</code> 產生付款簽章，
+            再以 <code>PAYMENT-SIGNATURE</code>（或舊版 <code>X-PAYMENT</code>）重試相同請求。
+            首頁互動表單則使用下方的免費 <code>/api/demo</code>，不需要錢包。
           </p>
           <div class="code-heading">
             <span><span class="method">POST</span> JSON 請求</span><span>JavaScript</span>
           </div>
-          <pre tabindex="0" aria-label="本站前端 POST 查核範例"><code>{{ postExample }}</code></pre>
+          <pre tabindex="0" aria-label="x402 POST 查核範例"><code>{{ postExample }}</code></pre>
           <p class="note">
-            POST 必須來自本站（相同協定、主機與連接埠）或允許清單內的來源：
-            <code>https://check.vtaiwan.tw</code>、<code>https://civic.vtaiwan.tw</code>
-            及帶連接埠的本機開發位址；Origin 由瀏覽器自動附上。清單內的跨來源請求會取得 CORS
-            授權標頭，OPTIONS 預檢回 204。其他來源、缺少 Origin 或 Origin 為 null 都回 403。
+            付費端點預設使用 Base mainnet（<code>eip155:8453</code>）與 0.05 USDC；測試時可切換 Base
+            Sepolia（<code>eip155:84532</code>）。付款簽章由錢包或 x402 client
+            產生，請勿在瀏覽器程式碼中放入 facilitator secret。
           </p>
           <p class="note">
-            內容較長或包含敏感資訊時，建議使用 POST，避免文字出現在網址歷史或 access
-            log。請勿在呼叫端傳入 OpenRouter 金鑰。
+            付費端點允許寬鬆跨來源 CORS，預檢允許 <code>PAYMENT-SIGNATURE</code> 與
+            <code>X-PAYMENT</code>。免費 <code>/api/demo</code> 仍只接受本站與既有允許清單來源，
+            並保留 Origin guard、CORS 與 IP 限流。
           </p>
           <details class="code-details">
             <summary>使用 GET 呼叫</summary>
@@ -175,15 +184,11 @@ const verdicts = [
             bytes。沒有網址時請省略 <code>url</code>，不要傳空字串或 <code>null</code>。
           </p>
           <div class="callout">
-            <strong>白名單機構網址可作參考，其他網址只提供背景。</strong>
+            <strong>輸入會在付款放行後轉送 fact-check-core。</strong>
             <p>
-              支援 HTML 與純文字頁面，不執行網頁 JavaScript。網址抓取失敗時，Cofacts
-              查核仍會繼續，並在回應保留警告。重新導向後的最終網址若屬於
-              <code>gov.tw</code>、<code>edu.tw</code> 或其子網域，或以
-              <code>https://tfc-taiwan.org.tw</code> 開頭，查無 Cofacts
-              資料時仍可作為機構參考證據；網域白名單不保證內容正確，仍需核對發布機關、適用範圍與時效。
-              其他網址只有在取得 Cofacts 證據時，才會以最低優先序作為背景；否則改以模型常識推估，
-              信心值上限 0.5。
+              本 Worker 只負責輸入基本格式與公開網址驗證，不執行查核模型。GET 的 query string 會轉成
+              core 所需的 POST JSON；核心回應本文與 <code>X-Request-Id</code>、
+              <code>Cache-Control</code>、<code>X-Fact-Check-Cache</code> 等標頭會原樣回傳。
             </p>
           </div>
         </section>
@@ -248,31 +253,10 @@ const verdicts = [
 
         <section id="errors" class="doc-section" aria-labelledby="errors-title">
           <p class="section-number">04 / 狀態與錯誤</p>
-          <h2 id="errors-title">先看 HTTP，再看 status</h2>
+          <h2 id="errors-title">先看 HTTP，再看核心回應</h2>
           <p>
-            HTTP 200 包含以下三種情況。串接時，請一併檢查 JSON 的 <code>status</code> 與
-            <code>meta.warnings</code>。
-          </p>
-          <dl class="field-list">
-            <div>
-              <dt><code>completed</code></dt>
-              <dd>查核流程完成；證據不足也是有效結果。</dd>
-            </div>
-            <div>
-              <dt><code>partial</code></dt>
-              <dd>部分上游服務失敗，根據仍可取得的證據完成綜整。警告會列出失敗階段。</dd>
-            </div>
-            <div>
-              <dt><code>blocked</code></dt>
-              <dd>
-                安全層停止查核；factuality、confidence 與 verdict 為
-                <code>null</code>，related_checks 為空陣列。
-              </dd>
-            </div>
-          </dl>
-          <p>
-            安全分類 <code>allow</code> 會繼續；<code>review</code>
-            也會繼續，但保留旗標。引用待查言論、新聞、公共政策及學術討論等情境，會納入查核例外考量。
+            付款放行後，查核 JSON 與核心的狀態欄位會原樣轉送；服務自身只負責付款與 proxy。
+            所有回應都附 <code>X-Request-Id</code>，並維持 <code>Cache-Control: no-store</code>。
           </p>
           <div class="table-scroll" tabindex="0" role="region" aria-label="HTTP 錯誤狀態表">
             <table>
@@ -285,113 +269,102 @@ const verdicts = [
               </thead>
               <tbody>
                 <tr>
-                  <th scope="row">400</th>
-                  <td><code>INVALID_INPUT</code></td>
-                  <td>依 message 修正文字、網址、JSON 格式或請求大小。</td>
+                  <th scope="row">402</th>
+                  <td><code>PAYMENT_REQUIRED</code></td>
+                  <td>依 PAYMENT-REQUIRED 付款，帶 PAYMENT-SIGNATURE 重試。</td>
                 </tr>
                 <tr>
-                  <th scope="row">403</th>
-                  <td><code>FORBIDDEN_ORIGIN</code></td>
-                  <td>POST 或 OPTIONS 的來源不在允許清單，也與本站不同源。</td>
+                  <th scope="row">400</th>
+                  <td><code>INVALID_INPUT</code></td>
+                  <td>修正 JSON、文字或網址後重試。</td>
                 </tr>
                 <tr>
                   <th scope="row">413</th>
                   <td><code>PAYLOAD_TOO_LARGE</code></td>
-                  <td>已宣告的請求本文過大，請縮短內容。</td>
-                </tr>
-                <tr>
-                  <th scope="row">429</th>
-                  <td><code>BUDGET_EXCEEDED</code></td>
-                  <td>今日 Workers AI 用量已達上限；依 Retry-After 秒數於 UTC 隔日重試。</td>
+                  <td>縮短請求本文。</td>
                 </tr>
                 <tr>
                   <th scope="row">502</th>
                   <td><code>UPSTREAM_UNAVAILABLE</code></td>
-                  <td>必要上游服務無法使用；依 stage 確認階段，稍後重試。</td>
-                </tr>
-                <tr>
-                  <th scope="row">503</th>
-                  <td><code>BUDGET_UNAVAILABLE</code></td>
-                  <td>用量控管服務暫時無法使用，稍後重試。</td>
+                  <td>service binding 或 core 暫時不可用；付款結算風險見 README。</td>
                 </tr>
                 <tr>
                   <th scope="row">500</th>
                   <td><code>INTERNAL_ERROR</code></td>
-                  <td>服務發生未預期錯誤，請提供 request_id 協助排查。</td>
+                  <td>提供 request ID 協助排查。</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p>
-            Gemma（證據綜整）失敗回 502。Safeguard 暫時失敗時跳過安全分類，並將 moderation.decision
-            標記為 skipped，以 partial 狀態繼續查核；只有缺少金鑰
-            （OPENROUTER_API_KEY）等設定錯誤才回 502。Cofacts 搜尋或語意初篩失敗時一律回
-            502。單篇詳細證據失敗則保留其他資料。
-          </p>
           <p class="note">
-            查核回應附有 <code>X-Request-Id</code> 與 <code>Cache-Control: no-store</code>。<code
-              >GET /health</code
-            >
-            只確認服務能回應，不代表外部模型與資料來源皆正常。
+            `/api/demo` 另有免費入口的 <code>FORBIDDEN_ORIGIN</code> 與 <code>RATE_LIMITED</code>；
+            這些守護不套用到 x402 付費端點。
           </p>
         </section>
 
-        <section id="pipeline" class="doc-section" aria-labelledby="pipeline-title">
-          <p class="section-number">05 / 查核如何進行</p>
-          <h2 id="pipeline-title">先找相關證據，再綜整判斷</h2>
+        <section id="payment" class="doc-section" aria-labelledby="payment-title">
+          <p class="section-number">05 / x402 付款流程</p>
+          <h2 id="payment-title">付款後再轉送查核核心</h2>
           <ol class="pipeline-list">
             <li>
               <span class="step-index">1</span>
               <div>
-                <h3>安全分類</h3>
-                <p>OpenRouter Safeguard 判斷內容是否能進入查核流程。</p>
+                <h3>收到 402</h3>
+                <p>第一次呼叫不帶付款，服務回傳 PAYMENT-REQUIRED 與繁體中文付款說明。</p>
               </div>
             </li>
             <li>
               <span class="step-index">2</span>
               <div>
-                <h3>搜尋候選內容</h3>
-                <p>Cofacts 召回最多 15 篇候選文章；選填 URL 的抓取在此階段平行進行。</p>
+                <h3>使用錢包付款</h3>
+                <p>預設在 Base mainnet 以 USDC 支付 0.05；測試可切換 Base Sepolia。</p>
               </div>
             </li>
             <li>
               <span class="step-index">3</span>
               <div>
-                <h3>篩出真正相關的文章</h3>
-                <p>Workers AI gpt-oss-20b 批次判斷語意相關性，最多保留 5 篇。此階段不判真假。</p>
+                <h3>帶簽章重試</h3>
+                <p>把 PAYMENT-SIGNATURE（或 X-PAYMENT）附在相同 GET／POST 請求重試。</p>
               </div>
             </li>
             <li>
               <span class="step-index">4</span>
               <div>
-                <h3>取得詳細證據</h3>
-                <p>只讀取通過初篩文章的人工與 AI 查核回覆，並保留來源連結。</p>
+                <h3>驗證並轉送</h3>
+                <p>
+                  facilitator verify 與 settle 成功後，請求才會透過 service binding 送到
+                  fact-check-core。
+                </p>
               </div>
             </li>
             <li>
               <span class="step-index">5</span>
               <div>
-                <h3>綜整結果</h3>
+                <h3>保留核心回應</h3>
                 <p>
-                  Gemma 根據整理後的證據產生判斷；查無相關 Cofacts
-                  查核資料時（包括只附網址、沒有任何查核回覆的情況），改以模型常識推估，回傳的信心值上限
-                  0.5，證據不足時回傳證據不足。
+                  核心回應本文與 X-Request-Id、Cache-Control、X-Fact-Check-Cache 等標頭原樣回傳。
                 </p>
               </div>
             </li>
           </ol>
+          <p class="note">
+            x402 沒有 JWT cookie 通行證；每一個付費 API 請求都要付款。付款已結算但核心失敗時會回
+            502，服務沒有內建退款。
+          </p>
         </section>
 
         <section id="self-host" class="doc-section self-host" aria-labelledby="self-host-title">
           <p class="section-number">06 / 自行架設</p>
-          <h2 id="self-host-title">在自己的服務中使用</h2>
+          <h2 id="self-host-title">設定 facilitator 與 core binding</h2>
           <p>
-            本專案以 Cloudflare Workers 與 Hono 執行。維運者需設定
-            <code>OPENROUTER_API_KEY</code>，並啟用 Workers AI 的 <code>AI</code> binding；Cofacts
-            使用公開 GraphQL，無須 app ID 或 secret。
+            本專案以 Cloudflare Workers、Hono 與 <code>@x402/hono</code> 執行。維運者需設定
+            <code>PAY_TO</code>、<code>X402_NETWORK</code>、<code>X402_PRICE</code> 與
+            <code>FACILITATOR_URL</code>，並在 <code>wrangler.jsonc</code> 維持
+            <code>FACT_CHECK_CORE</code> service binding。Base mainnet 上線前請準備 production
+            facilitator；公開 x402.org facilitator 僅適合 Base Sepolia 測試。
           </p>
           <a class="text-link" href="https://github.com/g0v/fact-check-api#readme"
-            >查看安裝與開發指南 <span aria-hidden="true">↗</span></a
+            >查看安裝與付款設定指南 <span aria-hidden="true">↗</span></a
           >
         </section>
       </div>

@@ -1,14 +1,13 @@
 import { LIMITS } from "../config";
-import type { FactCheckInput, ModerationResult, SynthesisResult } from "../types/fact-check";
-import { verdicts } from "../types/fact-check";
+import type { FactCheckInput } from "../types/fact-check";
 import { ApiError } from "../utils/errors";
 import { validatePublicUrl } from "../utils/url";
-import { array, enumValue, optionalText, record, string, unitNumber } from "../utils/validation";
+import { record, string } from "../utils/validation";
 
 export function parseInput(value: unknown): FactCheckInput {
   try {
     const input = record(value);
-    const text = string(input.text, 100_000);
+    const text = string(input.text, LIMITS.text);
     if ([...text].length > LIMITS.text) throw new Error("文字過長。");
     let url: string | undefined;
     if (input.url !== undefined) url = validatePublicUrl(string(input.url, LIMITS.url)).href;
@@ -20,35 +19,4 @@ export function parseInput(value: unknown): FactCheckInput {
       400,
     );
   }
-}
-
-export function parseModeration(value: unknown): ModerationResult {
-  const data = record(value);
-  const categories = array(data.categories);
-  if (categories.length > 10) throw new Error("安全分類過多。");
-  const reason = optionalText(data.reason);
-  if (reason && reason.length > 2_000) throw new Error("安全分類原因過長。");
-  const decision = enumValue(data.decision, ["allow", "review", "block"]);
-  const parsedCategories = categories.map((category) => string(category, 100));
-  // 模型可能回 allow 卻附上分類；只要列出任何分類，安全層一律視為 block（查核例外走 review）。
-  return {
-    decision: decision === "allow" && parsedCategories.length > 0 ? "block" : decision,
-    categories: parsedCategories,
-    ...(reason ? { reason } : {}),
-  };
-}
-
-export function parseSynthesis(value: unknown, hasUsableEvidence: boolean): SynthesisResult {
-  const data = record(value);
-  const result: SynthesisResult = {
-    verdict: enumValue(data.verdict, verdicts),
-    factuality: unitNumber(data.factuality),
-    confidence: unitNumber(data.confidence),
-    feedback: string(data.feedback, 6_000),
-  };
-  // 沒有可用證據（無 Cofacts 人工／AI 回覆，也無白名單機構網址）時是常識判斷，
-  // confidence 上限為 0.5；超過就由程式下修，不整筆丟棄。
-  // 只有一般使用者網址的情境也算常識判斷，網址文字不作為查核證據。
-  if (!hasUsableEvidence && result.confidence > 0.5) result.confidence = 0.5;
-  return result;
 }

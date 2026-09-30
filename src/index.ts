@@ -4,7 +4,6 @@ import AboutView from "./views/About.vue";
 import { renderPage } from "./ssr/render";
 import { headForHome, headForAbout } from "./ssr/heads";
 import { api } from "./api";
-export { UsageBudget } from "./api/services/usage-budget";
 export { RateLimiterDO } from "./api/services/rate-limiter-do";
 import type { ApiBindings } from "./api/types/fact-check";
 
