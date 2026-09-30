@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import app from "../src/index";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("既有主程式整合", () => {
   it("health 與 hello 可正常使用", async () => {
@@ -13,6 +17,15 @@ describe("既有主程式整合", () => {
     expect(await response.text()).toMatch(/<!doctype html>/i);
   });
   it("掛載 /api/fact-check 的 x402 付費閘門", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:84532" }],
+          extensions: [],
+        }),
+      ),
+    );
     const response = await app.request("/api/fact-check", {}, {});
     expect(response.status).toBe(402);
     expect(response.headers.has("PAYMENT-REQUIRED")).toBe(true);

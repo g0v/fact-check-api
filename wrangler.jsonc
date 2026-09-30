@@ -10,8 +10,8 @@
     "PAY_TO": "0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB", // 公開收款錢包。
     "X402_NETWORK": "eip155:8453", // Base mainnet；測試網改為 eip155:84532。
     "X402_PRICE": "$0.05",
-    // 公開 facilitator 僅支援 Base Sepolia；mainnet 上線需改用 production facilitator。
-    "FACILITATOR_URL": "https://www.x402.org/facilitator",
+    // 正式 Base mainnet 使用 CDP；部署前須設定 CDP_API_KEY_ID／CDP_API_KEY_SECRET secrets。
+    "FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402",
     // demo 是唯一免費入口，預設每個 IP 每 60 秒最多一次，可由環境變數覆寫。
     "RATE_LIMIT_WINDOW_MS": "60000",
   },

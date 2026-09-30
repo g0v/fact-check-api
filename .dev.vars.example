@@ -1,8 +1,10 @@
-# 只在本機填入敏感的 facilitator 憑證；公開付款設定位於 wrangler.jsonc 的 vars。
-FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
-CDP_API_KEY_ID=your-cdp-api-key-id
-CDP_API_KEY_SECRET=your-cdp-api-key-secret
+# 本機預設使用不需憑證的 Base Sepolia 公開 facilitator。
+X402_NETWORK=eip155:84532
+FACILITATOR_URL=https://www.x402.org/facilitator
 
-# 本機 Base Sepolia 測試可取消註解；正式預設值仍由 wrangler.jsonc vars 提供。
-# X402_NETWORK=eip155:84532
-# FACILITATOR_URL=https://www.x402.org/facilitator
+# 改用 Coinbase CDP facilitator 時，才填入這一組 Secret API Key。
+# CDP_API_KEY_ID=your-cdp-api-key-id
+# CDP_API_KEY_SECRET=your-cdp-api-key-secret
+
+# 只有其他 facilitator 明確提供固定 Bearer token 時才使用；不要與 CDP keys 同時設定。
+# FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token

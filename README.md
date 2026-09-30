@@ -26,32 +26,41 @@
 
 需要 Node.js、npm、Vite+（`vp`）與 Cloudflare 帳號。查核模型憑證由 fact-check-core 管理，本 repo 不需要 OpenRouter API key 或 Workers AI binding。
 
+操作文件：
+
+- [正式部署前申辦、CDP Secret 與 Cloudflare 設定](./deploy_notes.md)
+- [本機 server 與無真錢 mock 付款測試](./local_test.md)
+
 ```bash
 vp install
 cp .dev.vars.example .dev.vars
 vp run dev
 ```
 
-公開付款設定放在 `wrangler.jsonc` 的 `vars`：`PAY_TO` 是公開收款錢包，預設
-`X402_NETWORK=eip155:8453`（Base mainnet）、`X402_PRICE=$0.05`，以及預設的
-`FACILITATOR_URL=https://www.x402.org/facilitator`。demo 的公開預設限流也在 vars 設為
-`RATE_LIMIT_WINDOW_MS=60000`。請依部署環境直接修改這些公開值。
+正式部署的公開付款設定放在 `wrangler.jsonc` 的 `vars`：`PAY_TO` 是公開收款錢包，
+`X402_NETWORK=eip155:8453`（Base mainnet）、`X402_PRICE=$0.05`，並使用
+`FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402`。demo 的公開預設限流也在
+vars 設為 `RATE_LIMIT_WINDOW_MS=60000`。部署前必須另外建立 CDP Secret API Key，並把 ID
+與 Secret 設為 Cloudflare secrets。
 
-本機 `.dev.vars` 只放敏感憑證，不要提交該檔案；`.dev.vars.example` 已提供 placeholder：
+本機 `.dev.vars` 不要提交。複製 `.dev.vars.example` 後會覆寫正式設定，改用不需憑證的 Base
+Sepolia 公開 facilitator：
 
 ```dotenv
-FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
-CDP_API_KEY_ID=your-cdp-api-key-id
-CDP_API_KEY_SECRET=your-cdp-api-key-secret
+X402_NETWORK=eip155:84532
+FACILITATOR_URL=https://www.x402.org/facilitator
 
-# 本機 Base Sepolia 測試時才取消註解：
-# X402_NETWORK=eip155:84532
-# FACILITATOR_URL=https://www.x402.org/facilitator
+# 改用 CDP 時才填入，而且兩個值必須成對：
+# CDP_API_KEY_ID=your-cdp-api-key-id
+# CDP_API_KEY_SECRET=your-cdp-api-key-secret
+
+# 只有其他 facilitator 提供固定 Bearer token 時才使用：
+# FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
 ```
 
 `wrangler.jsonc` 也已設定 `FACT_CHECK_CORE` remote service binding。公開 x402.org facilitator
-僅支援 Base Sepolia；Base mainnet 上線前請把 `FACILITATOR_URL` 改成 production facilitator，
-並只透過 Cloudflare Secrets 注入所需憑證；不要把 facilitator 或 CDP secret 放進前端程式碼。
+的 EVM exact scheme 僅支援 Base Sepolia；正式 Base mainnet 使用 CDP。不要把 facilitator 或 CDP
+secret 放進前端程式碼。
 
 ## API
 
@@ -85,7 +94,10 @@ const result = await response.json();
 
 ## x402 付款
 
-付費端點使用維護中的 `@x402/hono`（目前 `2.28.0`）搭配 `@x402/core`、`@x402/evm`。這組 SDK 提供 Hono middleware、Cloudflare Workers 可用的 HTTP facilitator client、可自訂 facilitator URL／認證標頭，以及 EVM `exact` scheme；因此比已停止演進介面較多的舊 `x402-hono` 更適合本 Worker。
+付費端點使用維護中的 `@x402/hono`（目前 `2.28.0`）搭配 `@x402/core`、`@x402/evm`。
+Coinbase CDP 認證使用官方 `@coinbase/cdp-sdk` 的 `generateJwt()`，為
+`supported`、`verify`、`settle` 各自產生綁定 HTTP method、host 與 path 的短效 JWT；不會把 CDP
+API Key Secret 直接送到 facilitator。
 
 付款流程：
 
@@ -102,15 +114,15 @@ const result = await response.json();
 
 預設值如下，可由 Worker vars 切換：
 
-| 變數                     | 預設值                                       | 說明                                       |
-| ------------------------ | -------------------------------------------- | ------------------------------------------ |
-| `PAY_TO`                 | `0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB` | 公開收款錢包                               |
-| `X402_NETWORK`           | `eip155:8453`                                | Base mainnet（CAIP-2）                     |
-| `X402_PRICE`             | `$0.05`                                      | 每個 HTTP 請求一次付款，0.05 USDC          |
-| `FACILITATOR_URL`        | `https://www.x402.org/facilitator`           | facilitator 根網址                         |
-| `FACILITATOR_AUTH_TOKEN` | 未設定                                       | 可選 Bearer token secret                   |
-| `CDP_API_KEY_ID`         | 未設定                                       | 可選 production facilitator API key ID     |
-| `CDP_API_KEY_SECRET`     | 未設定                                       | 可選 production facilitator API key secret |
+| 變數                     | 預設值                                          | 說明                                     |
+| ------------------------ | ----------------------------------------------- | ---------------------------------------- |
+| `PAY_TO`                 | `0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB`    | 公開收款錢包                             |
+| `X402_NETWORK`           | `eip155:8453`                                   | Base mainnet（CAIP-2）                   |
+| `X402_PRICE`             | `$0.05`                                         | 每個 HTTP 請求一次付款，0.05 USDC        |
+| `FACILITATOR_URL`        | `https://api.cdp.coinbase.com/platform/v2/x402` | CDP production facilitator 根網址        |
+| `FACILITATOR_AUTH_TOKEN` | 未設定                                          | 其他 facilitator 可選的固定 Bearer token |
+| `CDP_API_KEY_ID`         | 未設定                                          | CDP Secret API Key ID                    |
+| `CDP_API_KEY_SECRET`     | 未設定                                          | CDP Secret API Key Secret                |
 
 每一個請求都必須付款；服務不使用 JWT cookie 通行證或跨請求 session。修改 `X402_PRICE` 時，應同步確認 facilitator 與收款資產的支援，並在對外文件更新實際價格。
 
@@ -127,7 +139,19 @@ FACILITATOR_URL=https://www.x402.org/facilitator
 
 ### Base mainnet 上線前置條件
 
-公開 `https://www.x402.org/facilitator` 目前僅支援 Base Sepolia 測試網；Base mainnet 必須改用 Coinbase CDP 等 production facilitator，或自架且能處理 mainnet 的 facilitator。設定 `FACILITATOR_URL`，依所選 facilitator 要求填入 `FACILITATOR_AUTH_TOKEN` 或 `CDP_API_KEY_ID`／`CDP_API_KEY_SECRET` secrets。SDK 的 `HTTPFacilitatorClient` 支援自訂 path-specific headers；本 repo 會將上述 CDP 欄位以 facilitator 可辨識的 `x-api-key-id`／`x-api-key-secret` headers 傳送，但 production facilitator 若要求 CDP JWT 或不同 header 格式，須在部署前依其文件調整認證設定。沒有 production facilitator 憑證時不要把預設公開 facilitator 當成 mainnet 已可用。
+公開 `https://www.x402.org/facilitator` 的 EVM exact scheme 目前僅支援 Base Sepolia 測試網；
+`wrangler.jsonc` 的 Base mainnet 正式設定已改用 Coinbase CDP。請先在 Coinbase Developer Platform
+建立一把 **Secret API Key**，它會同時提供 Key ID 與 Key Secret；不需要另外向 Coinbase 申請
+`FACILITATOR_AUTH_TOKEN`。接著以互動輸入設定 Cloudflare secrets，避免值出現在 shell history：
+
+```bash
+npx wrangler secret put CDP_API_KEY_ID
+npx wrangler secret put CDP_API_KEY_SECRET
+```
+
+兩個 CDP 值必須成對設定，且不可與 `FACILITATOR_AUTH_TOKEN` 混用。後者只適用於明確提供固定
+Bearer token 的其他 facilitator。middleware 會透過 Coinbase 官方 SDK 即時產生約兩分鐘有效、
+綁定個別 facilitator 路徑的 JWT；`FACILITATOR_AUTH_TOKEN` 不是拿來保存這種短效 CDP JWT。
 
 ### 核心錯誤與結算風險
 
@@ -146,7 +170,7 @@ x402 middleware 先 verify，再執行 handler；SDK 對 handler 回應 `>=400` 
 | 413  | `PAYLOAD_TOO_LARGE`                        | 縮短 POST 本文                                         |
 | 403  | `FORBIDDEN_ORIGIN`                         | 僅適用免費 `/api/demo` 的 Origin guard                 |
 | 429  | `RATE_LIMITED`                             | 僅適用免費 demo 的 IP 限流，依 `Retry-After` 重試      |
-| 502  | `UPSTREAM_UNAVAILABLE`                     | service binding 不可用；可能已發生付款結算，見上方風險 |
+| 502  | `UPSTREAM_UNAVAILABLE` 或 facilitator 錯誤 | core 錯誤不 settle；若發生在 settle 階段需另查付款狀態 |
 | 500  | `INTERNAL_ERROR`                           | 提供 `X-Request-Id` 協助排查                           |
 
 ## 首頁與本機開發

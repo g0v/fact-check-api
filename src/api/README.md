@@ -16,14 +16,19 @@
 付款設定由 Worker vars／secrets 注入：
 
 - `PAY_TO` 預設為公開收款錢包。
-- `X402_NETWORK` 預設 `eip155:8453`（Base mainnet）。
+- 程式無 vars 時安全回退到 `eip155:84532` 與公開 facilitator；正式 `wrangler.jsonc` 明確使用
+  `eip155:8453`（Base mainnet）與 Coinbase CDP。
 - `X402_PRICE` 預設 `$0.05`，每個請求都要重新付款。
-- `FACILITATOR_URL` 預設公開 x402 facilitator。
-- `FACILITATOR_AUTH_TOKEN`、`CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 為可選認證 secrets。
+- `FACILITATOR_AUTH_TOKEN` 是其他 facilitator 可選的固定 Bearer token。
+- `CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 是 CDP Secret API Key，必須成對設定。
 
 每次請求先由 middleware 建立 `PAYMENT-REQUIRED`。帶有有效 `PAYMENT-SIGNATURE`（相容 `X-PAYMENT`）時，SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
-`x402.org` 公開 facilitator 目前只支援 Base Sepolia。上線 Base mainnet 前，必須改用 production facilitator（例如 Coinbase CDP）或自架服務，並依服務文件設定 authentications。SDK 的 `HTTPFacilitatorClient` 提供 path-specific custom headers；若 production service 要求 CDP JWT 或不同 header 格式，須在部署前調整 `middleware/x402.ts`。
+`x402.org` 公開 facilitator 的 EVM exact scheme 目前只支援 Base Sepolia。正式設定使用 Coinbase
+CDP；`generateJwt()` 會用 CDP Key ID／Secret 為 `supported`、`verify`、`settle`
+分別產生綁定 method、host、path 的短效 JWT。CDP keys 不可缺一，也不可和固定
+`FACILITATOR_AUTH_TOKEN` 混用。generic facilitator 則使用標準 `HTTPFacilitatorClient`，並實際讀取
+`/supported`，不可再以設定值假裝 facilitator 支援某個網路。
 
 付費端點 CORS 固定回 `Access-Control-Allow-Origin: *`，預檢允許 `Content-Type`、`PAYMENT-SIGNATURE`、`X-PAYMENT`，並 expose `PAYMENT-REQUIRED`、`PAYMENT-RESPONSE`、`X-Request-Id`、`Cache-Control`。不設 cookie 或 JWT 通行證。
 

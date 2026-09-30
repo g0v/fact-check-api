@@ -81,7 +81,8 @@ const verdicts = [
         <p class="panel-label">付費查核與免費入口</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/fact-check</code></div>
         <p class="endpoint-note">
-          x402 付費 API：verify 通過後轉送 fact-check-core，成功回應才 settle（每次 0.05 USDC）。
+          x402 付費 API：verify 通過後轉送 fact-check-core，成功回應才 settle（正式預設每次 0.05
+          USDC）。
         </p>
         <div class="endpoint-row">
           <span class="method method-get">GET</span><code>/api/fact-check</code>
@@ -118,7 +119,7 @@ const verdicts = [
           <p class="section-number">01 / 開始呼叫</p>
           <h2 id="quickstart-title">第一個查核請求</h2>
           <p>
-            `/api/fact-check` 是 x402 付費 API，每次查核收取 0.05 USDC。第一次呼叫會回
+            `/api/fact-check` 是 x402 付費 API，正式預設每次查核收取 0.05 USDC。第一次呼叫會回
             <code>402</code>；請用支援 x402 的錢包依 <code>PAYMENT-REQUIRED</code> 產生付款簽章，
             再以 <code>PAYMENT-SIGNATURE</code>（或舊版 <code>X-PAYMENT</code>）重試相同請求。
             首頁互動表單則使用下方的免費 <code>/api/demo</code>，不需要錢包。
@@ -128,9 +129,9 @@ const verdicts = [
           </div>
           <pre tabindex="0" aria-label="x402 POST 查核範例"><code>{{ postExample }}</code></pre>
           <p class="note">
-            付費端點預設使用 Base mainnet（<code>eip155:8453</code>）與 0.05 USDC；測試時可切換 Base
-            Sepolia（<code>eip155:84532</code>）。付款簽章由錢包或 x402 client
-            產生，請勿在瀏覽器程式碼中放入 facilitator secret。
+            正式部署設定使用 Base mainnet（<code>eip155:8453</code>）、CDP facilitator 與 0.05
+            USDC；本機範例預設改用 Base Sepolia（<code>eip155:84532</code>）公開 facilitator。
+            付款簽章由錢包或 x402 client 產生，請勿在瀏覽器程式碼中放入 facilitator secret。
           </p>
           <p class="note">
             付費端點允許寬鬆跨來源 CORS，預檢允許 <code>PAYMENT-SIGNATURE</code> 與
@@ -322,7 +323,7 @@ const verdicts = [
               <span class="step-index">2</span>
               <div>
                 <h3>使用錢包付款</h3>
-                <p>預設在 Base mainnet 以 USDC 支付 0.05；測試可切換 Base Sepolia。</p>
+                <p>正式預設在 Base mainnet 以 USDC 支付 0.05；本機範例使用 Base Sepolia。</p>
               </div>
             </li>
             <li>
@@ -368,7 +369,8 @@ const verdicts = [
             <code>PAY_TO</code>、<code>X402_NETWORK</code>、<code>X402_PRICE</code> 與
             <code>FACILITATOR_URL</code>，並在 <code>wrangler.jsonc</code> 維持
             <code>FACT_CHECK_CORE</code> service binding。Base mainnet 上線前請準備 production
-            facilitator；公開 x402.org facilitator 僅適合 Base Sepolia 測試。
+            facilitator；正式設定使用 CDP 短效 JWT，公開 x402.org facilitator 僅適合 Base Sepolia
+            測試。
           </p>
           <a class="text-link" href="https://github.com/g0v/fact-check-api#readme"
             >查看安裝與付款設定指南 <span aria-hidden="true">↗</span></a
