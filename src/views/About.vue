@@ -8,8 +8,9 @@ import NavBar from "../components/NavBar.vue";
     <h1>關於 Fact Check API</h1>
     <p>
       本 Worker 使用 x402 付費閘門保護 <code>/api/fact-check</code>。每次查核收取 0.05
-      USDC，付款驗證與結算由 facilitator 處理，通過後再透過 <code>FACT_CHECK_CORE</code> service
-      binding 呼叫獨立的 fact-check-core Worker。
+      USDC。facilitator 先 verify 付款；驗證成功後才透過 <code>FACT_CHECK_CORE</code> service
+      binding 呼叫獨立的 fact-check-core Worker，只有 handler 回應小於 400 才 settle
+      並回傳付款結果。core 回傳錯誤或 fetch 失敗轉成 502 時不會結算付款。
     </p>
     <p>
       首頁表單仍使用免費的 <code>/api/demo</code>，保留 Origin guard、CORS 與 IP 限流（預設每個 IP

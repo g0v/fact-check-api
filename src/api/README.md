@@ -21,7 +21,7 @@
 - `FACILITATOR_URL` 預設公開 x402 facilitator。
 - `FACILITATOR_AUTH_TOKEN`、`CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 為可選認證 secrets。
 
-每次請求先由 middleware 建立 `PAYMENT-REQUIRED`。帶有有效 `PAYMENT-SIGNATURE`（相容 `X-PAYMENT`）時，SDK 呼叫 facilitator `verify`；路由成功回應後呼叫 `settle`，再附上 `PAYMENT-RESPONSE`。middleware 也會把 facilitator 驗證／結算失敗留在付款錯誤流程，不進入 core。
+每次請求先由 middleware 建立 `PAYMENT-REQUIRED`。帶有有效 `PAYMENT-SIGNATURE`（相容 `X-PAYMENT`）時，SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
 `x402.org` 公開 facilitator 目前只支援 Base Sepolia。上線 Base mainnet 前，必須改用 production facilitator（例如 Coinbase CDP）或自架服務，並依服務文件設定 authentications。SDK 的 `HTTPFacilitatorClient` 提供 path-specific custom headers；若 production service 要求 CDP JWT 或不同 header 格式，須在部署前調整 `middleware/x402.ts`。
 
@@ -31,7 +31,7 @@
 
 `POST /api/fact-check` 只轉送 `{ text, url? }` JSON；`GET /api/fact-check?text=...&url=...` 會先解析並驗證 query，再建立新的 POST JSON request 給 core。呼叫端的 HTTP 方法不會原樣傳給 core，core 一律收到 `POST /fact-check`。core 回應本文與 headers 原樣回傳。
 
-service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILABLE`，不洩漏上游例外文字。若付款已結算但 core 隨後失敗，本服務仍誠實回 502；x402 沒有內建退款，本 Worker 也不假裝能退款。這是部署與監控時必須接受的已知風險。
+service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILABLE`；由於這是 handler 錯誤，付款不會結算，客戶端不被扣款。core 回 `2xx` 但內容為業務錯誤時仍可能結算；此外 settle 本身的網路失敗需要另外確認付款狀態。x402 沒有內建退款。
 
 ## 免費 demo 守護
 

@@ -9,9 +9,11 @@
 ```text
 /api/fact-check (GET／POST)
   → x402 PAYMENT-REQUIRED／PAYMENT-SIGNATURE
-  → facilitator verify + settle
+  → facilitator verify
   → FACT_CHECK_CORE service binding
   → fact-check-core POST /fact-check
+  → 核心回應 <400：facilitator settle → PAYMENT-RESPONSE
+  ↳ 核心回 >=400／fetch 失敗：直接回錯誤，不 settle
 
 /api/demo (POST，免費)
   → Origin guard + CORS + IP rate limit
@@ -90,7 +92,9 @@ const result = await response.json();
 1. 第一次呼叫不帶付款標頭，服務回 HTTP `402`。
 2. 從 `PAYMENT-REQUIRED` 讀取 `payTo`、金額、網路與資產資訊。
 3. 使用錢包依需求簽署付款，將編碼後的 `PAYMENT-SIGNATURE` 標頭（相容舊客戶端的 `X-PAYMENT` 也會被 SDK 讀取）加回**同一個 GET／POST 請求**重試。
-4. facilitator 驗證並結算成功後，服務才轉送 fact-check-core；核心回應完成後回傳 `PAYMENT-RESPONSE`。
+4. facilitator 先 verify；驗證成功後才轉送 fact-check-core。核心 handler 回應 <400（本 API 正常為 2xx）
+   才呼叫 settle，成功後回傳 `PAYMENT-RESPONSE`；核心回 `>=400` 或 fetch 失敗轉成 502 時直接回錯誤，
+   不會結算付款。
 
 付費端點提供寬鬆瀏覽器 CORS：`Access-Control-Allow-Origin: *`，預檢允許 `Content-Type`、`PAYMENT-SIGNATURE` 與 `X-PAYMENT`，並 expose `PAYMENT-REQUIRED`、`PAYMENT-RESPONSE`、`X-Request-Id` 與 `Cache-Control`。
 
@@ -125,9 +129,9 @@ FACILITATOR_URL=https://www.x402.org/facilitator
 
 公開 `https://www.x402.org/facilitator` 目前僅支援 Base Sepolia 測試網；Base mainnet 必須改用 Coinbase CDP 等 production facilitator，或自架且能處理 mainnet 的 facilitator。設定 `FACILITATOR_URL`，依所選 facilitator 要求填入 `FACILITATOR_AUTH_TOKEN` 或 `CDP_API_KEY_ID`／`CDP_API_KEY_SECRET` secrets。SDK 的 `HTTPFacilitatorClient` 支援自訂 path-specific headers；本 repo 會將上述 CDP 欄位以 facilitator 可辨識的 `x-api-key-id`／`x-api-key-secret` headers 傳送，但 production facilitator 若要求 CDP JWT 或不同 header 格式，須在部署前依其文件調整認證設定。沒有 production facilitator 憑證時不要把預設公開 facilitator 當成 mainnet 已可用。
 
-### 已結算但核心失敗的風險
+### 核心錯誤與結算風險
 
-x402 middleware 會在核心成功回應後結算付款。若 facilitator 已結算而核心隨後不可用，服務會誠實回傳 `502 UPSTREAM_UNAVAILABLE`；x402 沒有內建退款機制，本服務也不假裝能退款。這是付款已 settle 但上游失敗的已知風險，呼叫端與服務維運者應將核心可用性納入監控與風險評估。
+x402 middleware 先 verify，再執行 handler；SDK 對 handler 回應 `>=400` 不呼叫 settle，而是把錯誤回給客戶端。因此 core 回 `>=400`，或 core fetch 失敗由本 Worker 轉成 `502 UPSTREAM_UNAVAILABLE` 時，不會結算，客戶端不被扣款。真正的殘餘風險是 core 回 `2xx` 但本文內容其實是業務錯誤時仍會結算，以及 settle 本身發生網路失敗時需要另外確認付款狀態；x402 沒有內建退款機制。
 
 ## 回應與錯誤
 

@@ -80,7 +80,9 @@ const verdicts = [
       <div class="endpoint-panel" aria-label="API 端點一覽">
         <p class="panel-label">付費查核與免費入口</p>
         <div class="endpoint-row"><span class="method">POST</span><code>/api/fact-check</code></div>
-        <p class="endpoint-note">x402 付費 API：每次呼叫 0.05 USDC，付款後轉送 fact-check-core。</p>
+        <p class="endpoint-note">
+          x402 付費 API：verify 通過後轉送 fact-check-core，成功回應才 settle（每次 0.05 USDC）。
+        </p>
         <div class="endpoint-row">
           <span class="method method-get">GET</span><code>/api/fact-check</code>
         </div>
@@ -187,7 +189,7 @@ const verdicts = [
             bytes。沒有網址時請省略 <code>url</code>，不要傳空字串或 <code>null</code>。
           </p>
           <div class="callout">
-            <strong>輸入會在付款放行後轉送 fact-check-core。</strong>
+            <strong>付款 verify 通過後才轉送 fact-check-core；成功回應才會 settle。</strong>
             <p>
               本 Worker 只負責輸入基本格式與公開網址驗證，不執行查核模型。GET 的 query string 會轉成
               core 所需的 POST JSON；核心回應本文與 <code>X-Request-Id</code>、
@@ -289,7 +291,7 @@ const verdicts = [
                 <tr>
                   <th scope="row">502</th>
                   <td><code>UPSTREAM_UNAVAILABLE</code></td>
-                  <td>service binding 或 core 暫時不可用；付款結算風險見 README。</td>
+                  <td>service binding 或 core 暫時不可用；這次錯誤不會結算付款，詳見 README。</td>
                 </tr>
                 <tr>
                   <th scope="row">500</th>
@@ -307,7 +309,7 @@ const verdicts = [
 
         <section id="payment" class="doc-section" aria-labelledby="payment-title">
           <p class="section-number">05 / x402 付款流程</p>
-          <h2 id="payment-title">付款後再轉送查核核心</h2>
+          <h2 id="payment-title">先驗證，再轉送；成功才結算</h2>
           <ol class="pipeline-list">
             <li>
               <span class="step-index">1</span>
@@ -333,10 +335,11 @@ const verdicts = [
             <li>
               <span class="step-index">4</span>
               <div>
-                <h3>驗證並轉送</h3>
+                <h3>驗證、轉送，再結算</h3>
                 <p>
-                  facilitator verify 與 settle 成功後，請求才會透過 service binding 送到
-                  fact-check-core。
+                  facilitator verify 成功後才透過 service binding 送到 fact-check-core；handler 回應
+                  <code>&lt;400</code>（本 API 通常為 2xx）才呼叫 settle。回應
+                  <code>&gt;=400</code> 時不結算，錯誤直接回客戶端。
                 </p>
               </div>
             </li>
@@ -351,8 +354,9 @@ const verdicts = [
             </li>
           </ol>
           <p class="note">
-            x402 沒有 JWT cookie 通行證；每一個付費 API 請求都要付款。付款已結算但核心失敗時會回
-            502，服務沒有內建退款。
+            x402 沒有 JWT cookie 通行證；每個付費 API 請求都要 verify。core 回
+            <code>&gt;=400</code> 或 fetch 失敗轉 502 時不結算；core 回 2xx
+            但內容為錯誤仍可能結算，settle 網路失敗則需另外確認付款狀態。
           </p>
         </section>
 

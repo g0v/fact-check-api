@@ -189,6 +189,69 @@ describe("/api/fact-check x402 閘門", () => {
     ).toHaveLength(2);
   });
 
+  it("核心回傳 502 時不結算，且保留核心錯誤狀態", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () =>
+      Response.json({ status: "error", message: "核心暫時失敗。" }, { status: 502 }),
+    );
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": paymentHeader(required),
+        },
+        body: JSON.stringify({ text: "核心錯誤" }),
+      },
+      environment(core),
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ status: "error", message: "核心暫時失敗。" });
+    expect(
+      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
+    ).toHaveLength(1);
+    expect(
+      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
+    ).toHaveLength(0);
+  });
+
+  it("核心 fetch 拋例外轉成 502 時不結算", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => {
+      throw new Error("core network failure");
+    });
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": paymentHeader(required),
+        },
+        body: JSON.stringify({ text: "核心網路錯誤" }),
+      },
+      environment(core),
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      status: "error",
+      error: "UPSTREAM_UNAVAILABLE",
+    });
+    expect(
+      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
+    ).toHaveLength(1);
+    expect(
+      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
+    ).toHaveLength(0);
+  });
+
   it("每次呼叫都要付款，連續兩次未付款都回 402", async () => {
     const fetcher = facilitatorFetch();
     vi.stubGlobal("fetch", fetcher);
