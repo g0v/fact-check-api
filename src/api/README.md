@@ -36,7 +36,7 @@ CDP；`generateJwt()` 會用 CDP Key ID／Secret 為 `supported`、`verify`、`s
 
 ## core proxy
 
-`POST /api/fact-check` 只轉送 `{ text, url? }` JSON；`GET /api/fact-check?text=...&url=...` 會先解析並驗證 query，再建立新的 POST JSON request 給 core。呼叫端的 HTTP 方法不會原樣傳給 core，core 一律收到 `POST /fact-check`。core 回應本文與 headers 原樣回傳。
+`POST /api/fact-check` 只轉送 `{ text, url? }` JSON；`GET /api/fact-check?text=...&url=...` 會先解析並驗證 query，再建立新的 POST JSON request 給 core。呼叫端的 HTTP 方法不會原樣傳給 core，core 一律收到 `POST /fact-check`。proxy 以 `new Response(upstream.body, upstream)` 保留上游狀態、本文串流與標頭，建立可變的 headers，供 x402 SDK 與 CORS 安全調整；不預先讀取、緩衝或 tee 本文。這可避免 SDK 修改 service binding 的不可變 headers 時，把 core 的 `502` 錯誤意外轉成 `500` 並覆蓋本文。
 
 service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILABLE`；由於這是 handler 錯誤，付款不會結算，客戶端不被扣款。core 回 `2xx` 但內容為業務錯誤時仍可能結算；此外 settle 本身的網路失敗需要另外確認付款狀態。x402 沒有內建退款。
 

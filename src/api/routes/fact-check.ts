@@ -33,7 +33,8 @@ async function proxyToCore(c: Context<ApiEnv>, input: FactCheckInput): Promise<R
   if (!c.env.FACT_CHECK_CORE)
     throw new ApiError("UPSTREAM_UNAVAILABLE", "查核核心服務暫時無法使用。", 502);
   try {
-    return await c.env.FACT_CHECK_CORE.fetch(coreRequest(c, input));
+    const upstream = await c.env.FACT_CHECK_CORE.fetch(coreRequest(c, input));
+    return new Response(upstream.body, upstream);
   } catch {
     throw new ApiError("UPSTREAM_UNAVAILABLE", "查核核心服務暫時無法使用。", 502);
   }

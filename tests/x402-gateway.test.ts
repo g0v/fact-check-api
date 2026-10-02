@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { describe, expect, it, vi, afterEach } from "vite-plus/test";
 import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import type { PaymentRequired } from "@x402/core/types";
@@ -467,34 +468,62 @@ describe("/api/fact-check x402 閘門", () => {
     );
   });
 
-  it("核心回傳 502 時不結算，且保留核心錯誤狀態", async () => {
-    const fetcher = facilitatorFetch();
-    vi.stubGlobal("fetch", fetcher);
-    const core = coreBinding(async () =>
-      Response.json({ status: "error", message: "核心暫時失敗。" }, { status: 502 }),
-    );
-    const required = await requiredPayment(core);
-    const response = await api.request(
-      "/fact-check",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "PAYMENT-SIGNATURE": paymentHeader(required),
+  it("核心不可變的 502 回應保留狀態、本文與標頭，且不結算", async () => {
+    const errorBody = { status: "error", error: "UPSTREAM_UNAVAILABLE", message: "核心暫時失敗。" };
+    const server = createServer((_request, response) => {
+      response.writeHead(502, {
+        "Content-Type": "application/json",
+        "Retry-After": "7",
+        "X-Core-Trace": "core-502",
+      });
+      response.end(JSON.stringify(errorBody));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("本機測試服務未啟動。");
+      const upstream = await fetch(`http://127.0.0.1:${address.port}/fact-check`);
+      expect(() => upstream.headers.delete("X-Test")).toThrow(TypeError);
+      const fetcher = facilitatorFetch();
+      vi.stubGlobal("fetch", fetcher);
+      const core = coreBinding(async () => upstream);
+      const required = await requiredPayment(core);
+      const response = await api.request(
+        "/fact-check",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "PAYMENT-SIGNATURE": paymentHeader(required),
+          },
+          body: JSON.stringify({ text: "核心錯誤" }),
         },
-        body: JSON.stringify({ text: "核心錯誤" }),
-      },
-      environment(core),
-    );
+        environment(core),
+      );
 
-    expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ status: "error", message: "核心暫時失敗。" });
-    expect(
-      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
-    ).toHaveLength(1);
-    expect(
-      fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
-    ).toHaveLength(0);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual(errorBody);
+      expect(response.headers.get("Retry-After")).toBe("7");
+      expect(response.headers.get("X-Core-Trace")).toBe("core-502");
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(
+        fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
+      ).toHaveLength(1);
+      expect(
+        fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
+      ).toHaveLength(0);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+        server.closeAllConnections();
+      });
+    }
   });
 
   it("核心 fetch 拋例外轉成 502 時不結算", async () => {
