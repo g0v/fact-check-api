@@ -7,8 +7,9 @@ import { record, string } from "../utils/validation";
 export function parseInput(value: unknown): FactCheckInput {
   try {
     const input = record(value);
-    const text = string(input.text, LIMITS.text);
-    if ([...text].length > LIMITS.text) throw new Error("文字過長。");
+    if (typeof input.text !== "string") throw new Error("文字格式不正確。");
+    const text = input.text.trim();
+    if (!text || [...text].length > LIMITS.text) throw new Error("文字為空或過長。");
     let url: string | undefined;
     if (input.url !== undefined) url = validatePublicUrl(string(input.url, LIMITS.url)).href;
     return { text, ...(url ? { url } : {}) };

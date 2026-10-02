@@ -55,7 +55,7 @@ service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILA
 
 ## 輸入限制與錯誤
 
-- `text` 必填，最多 10,000 個 Unicode code point。
+- `text` 必填；先移除首尾空白，再按 Unicode code point 計算，最多 10,000 個。非 BMP 字元也只算一個 code point，不以 UTF-16 code unit 長度誤拒；JSON 本文仍獨立受 byte 上限限制。
 - `url` 選填，限公開 HTTP／HTTPS 網址，最多 2,048 個字元，不可含帳號密碼或內網位址。
 - POST `Content-Type` 必須為 `application/json`，本文最多 128,000 bytes。即使未提供 `Content-Length`，仍逐塊累計 bytes，超限立即取消串流並回 `413 PAYLOAD_TOO_LARGE`；總讀取時間上限為 10 秒，逾時取消串流並回 `400 INVALID_INPUT`。來源取消未完成不會延遲錯誤回應，這些輸入錯誤不呼叫 core，也不 settle。
 - 設定、錯誤訊息與對使用者可見字串使用繁體中文；固定 error code 與 API 欄位維持英文契約。
