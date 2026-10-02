@@ -34,10 +34,11 @@
   "ratelimits": [
     { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
   ],
-  // Free 方案只支援 SQLite 儲存後端的 Durable Objects；v2 註冊限流用 class，不可刪改 v1。
+  // v1、v2 是既有 migration 歷史，保留原順序；v3 會刪除已移除的 UsageBudget namespace 與資料。
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["UsageBudget"] },
     { "tag": "v2", "new_sqlite_classes": ["RateLimiterDO"] },
+    { "tag": "v3", "deleted_classes": ["UsageBudget"] },
   ],
   "observability": {
     "enabled": true,

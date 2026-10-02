@@ -100,6 +100,14 @@ CDP_API_KEY_SECRET
 - `fact-check-core` 位於正確帳號，且 `FACT_CHECK_CORE` service binding 能解析到它。
 - 沒有把 CDP Secret、錢包私鑰或其他 credential 放入 Git diff。
 
+### Durable Object 遷移警示：`UsageBudget`
+
+`wrangler.jsonc` 保留既有 `v1`（建立 `UsageBudget`）與 `v2`（建立 `RateLimiterDO`）migration 紀錄，並追加 `v3` `deleted_classes: ["UsageBudget"]`。這依循 Cloudflare 的 [legacy Durable Object migration 規則](https://developers.cloudflare.com/durable-objects/reference/durable-object-class-migrations-legacy/#delete-migration)：`v3` 只刪除 `UsageBudget` namespace，不會刪除 `RateLimiterDO` 或其他 Durable Object namespace。
+
+本次只修改本機設定，尚未將 `v3` migration 套用至 Cloudflare。設定檔或 dry run 都不能證明遠端 migration 已套用或成功，也不能確認遠端目前狀態。之後以此設定執行正式部署時，Cloudflare 會永久刪除 `UsageBudget` 所屬 namespace、其中所有 Durable Object 與全部儲存資料；這不是軟刪除，也沒有復原區。
+
+部署前必須先備份任何需要保留的 `UsageBudget` 資料、確認 Worker 與其他使用者都不再依賴該 namespace，並取得資料／服務負責人對永久刪除的明確核准。在備份、依賴確認及核准完成前，不得執行會套用此 migration 的正式部署。
+
 執行專案固定驗證與部署 dry run：
 
 ```bash
@@ -109,7 +117,7 @@ vp test
 npx wrangler deploy --dry-run
 ```
 
-dry run 只驗證建置與封裝，不會證明遠端 Secret 值正確、facilitator 可用或 service binding 能正常呼叫。
+dry run 只驗證建置與封裝，不會證明遠端 Secret 值正確、facilitator 可用、service binding 能正常呼叫，也不會套用或證明 `UsageBudget` 的遠端 migration 已成功。
 
 ## 五、部署與 smoke test
 

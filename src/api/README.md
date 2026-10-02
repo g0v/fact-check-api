@@ -60,4 +60,4 @@ service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILA
 - POST `Content-Type` 必須為 `application/json`，本文最多 128,000 bytes。即使未提供 `Content-Length`，仍逐塊累計 bytes，超限立即取消串流並回 `413 PAYLOAD_TOO_LARGE`；總讀取時間上限為 10 秒，逾時取消串流並回 `400 INVALID_INPUT`。來源取消未完成不會延遲錯誤回應，這些輸入錯誤不呼叫 core，也不 settle。
 - 設定、錯誤訊息與對使用者可見字串使用繁體中文；固定 error code 與 API 欄位維持英文契約。
 
-`wrangler.jsonc` 的 `migrations` `v1`、`v2` 標籤是既有 Durable Object migration 紀錄，必須保留，即使目前只使用 `RATE_LIMIT_DO`。不要刪改已套用的 migration tag。
+`wrangler.jsonc` 的 `migrations` `v1`、`v2` 是既有歷史，不能刪改；追加的 `v3` 以 `deleted_classes: ["UsageBudget"]` 退役已移除的 class，保留 `RateLimiterDO`。本次只修改本機設定，尚未套用或驗證遠端 migration；之後部署會永久刪除 `UsageBudget` namespace、其中所有 Durable Object 與儲存資料。部署前必須先備份需要保留的資料、確認無依賴並取得明確核准，詳見 [`deploy_notes.md`](../../deploy_notes.md#durable-object-遷移警示usagebudget)。本機 metadata 檢查或 dry run 不能證明遠端 migration 已成功。
