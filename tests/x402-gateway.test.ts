@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vite-plus/test";
 import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import type { PaymentRequired } from "@x402/core/types";
 import { api } from "../src/api";
+import app from "../src/index";
 import type { ApiBindings, ServiceBindingLike } from "../src/api/types/fact-check";
 
 const payTo = "0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB";
@@ -241,6 +242,22 @@ describe("/api/fact-check x402 閘門", () => {
         }),
       ),
     ).resolves.toMatchObject({ status: 500 });
+  });
+
+  it("未付款 HEAD 回 405，不呼叫 facilitator 或 core", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const response = await app.request(
+      "/api/fact-check?text=%E6%B8%AC%E8%A9%A6",
+      { method: "HEAD" },
+      environment(core),
+    );
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("GET, POST, OPTIONS");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(core.fetch).not.toHaveBeenCalled();
   });
 
   it("付費端點預檢允許付款標頭並 expose x402 回應標頭", async () => {

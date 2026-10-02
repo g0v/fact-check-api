@@ -134,6 +134,11 @@ export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler
 }
 
 export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) => {
+  // Hono 會以 GET handler 處理 HEAD，但保留原始方法；必須在 SDK 前阻擋付款規則未涵蓋的 HEAD。
+  if (c.req.method === "HEAD") {
+    c.header("Allow", "GET, POST, OPTIONS");
+    return c.body(null, 405);
+  }
   if (c.req.method === "OPTIONS") return next();
   const middleware = createX402PaymentMiddleware(c.env);
   return middleware(c, next);

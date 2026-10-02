@@ -24,6 +24,8 @@
 
 每次請求先由 middleware 建立 `PAYMENT-REQUIRED`。帶有有效 `PAYMENT-SIGNATURE`（相容 `X-PAYMENT`）時，SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
+付費查核只接受 GET／POST；OPTIONS 預檢不進入付款流程。HEAD 一律回 `405 Method Not Allowed`，並附上 `Allow: GET, POST, OPTIONS`，不建立付款 middleware，也不呼叫 facilitator 或 core。Hono 會把 HEAD 分派給 GET handler，但保留原始請求方法，因此必須在進入 x402 SDK 前明確阻擋，避免 HEAD 未命中付款規則卻觸發查核。
+
 `x402.org` 公開 facilitator 的 EVM exact scheme 目前只支援 Base Sepolia。正式設定使用 Coinbase
 CDP；`generateJwt()` 會用 CDP Key ID／Secret 為 `supported`、`verify`、`settle`
 分別產生綁定 method、host、path 的短效 JWT。CDP keys 不可缺一，也不可和固定
