@@ -22,7 +22,7 @@
 - `FACILITATOR_AUTH_TOKEN` 是其他 facilitator 可選的固定 Bearer token。
 - `CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 是 CDP Secret API Key，必須成對設定。
 
-每次請求先由 middleware 建立 `PAYMENT-REQUIRED`。帶有有效 `PAYMENT-SIGNATURE`（相容 `X-PAYMENT`）時，SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
+本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
 付費查核只接受 GET／POST；OPTIONS 預檢不進入付款流程。HEAD 一律回 `405 Method Not Allowed`，並附上 `Allow: GET, POST, OPTIONS`，不建立付款 middleware，也不呼叫 facilitator 或 core。Hono 會把 HEAD 分派給 GET handler，但保留原始請求方法，因此必須在進入 x402 SDK 前明確阻擋，避免 HEAD 未命中付款規則卻觸發查核。
 

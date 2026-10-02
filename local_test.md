@@ -61,7 +61,7 @@ curl -i "http://localhost:5173/api/fact-check?text=local-smoke-test"
 預期結果：
 
 1. `/health` 回 `200` 與 `{"status":"ok"}`。
-2. 未帶 `PAYMENT-SIGNATURE` 的 `/api/fact-check` 回 `402`。
+2. 未帶 `PAYMENT-SIGNATURE` 或 `X-PAYMENT` 的 `/api/fact-check` 回 `402`。
 3. 回應含 `PAYMENT-REQUIRED`，並描述 Base Sepolia 與本機設定的價格。
 4. 這一步沒有付款簽章，不會進入 core，也不會 settle 或扣款。
 
@@ -79,7 +79,9 @@ vp test tests/x402-gateway.test.ts
 
 - 未付款請求回 `402`，且 `PAYMENT-REQUIRED` 的 `payTo`、network、amount 正確。
 - 覆寫 `X402_PRICE` 時，`accepts.amount` 與繁中 description 使用同一個價格。
-- 模擬付款簽章後，順序為 facilitator `verify` → core → facilitator `settle`。
+- 模擬付款簽章後，順序為 facilitator `verify` → core → facilitator `settle`；`X-PAYMENT` 可承載 x402 v2 payload 完成相同流程。
+- 同時提供兩個付款標頭時，`PAYMENT-SIGNATURE` 優先；無效的 canonical 值不會被有效的 `X-PAYMENT` 掩蓋。
+- x402 v1 payload 不會被當成 v2 付款接受，也不會進入 core 或 settle。
 - verify 失敗時不呼叫 core。
 - core 回 `502` 或 fetch 拋錯時不 settle。
 - GET／POST 都會以正確的 POST JSON 轉送 core。
@@ -111,7 +113,7 @@ X402_NETWORK=eip155:84532
 FACILITATOR_URL=https://www.x402.org/facilitator
 ```
 
-再使用只持有 Base Sepolia 測試 ETH／USDC 的測試錢包，依 402 的 `PAYMENT-REQUIRED` 產生 `PAYMENT-SIGNATURE` 後重試同一請求。這會使用測試幣且需要連外，但沒有主網經濟價值。
+再使用只持有 Base Sepolia 測試 ETH／USDC 的測試錢包，依 402 的 `PAYMENT-REQUIRED` 產生 x402 v2 `PAYMENT-SIGNATURE` 後重試同一請求；也可把同一 v2 payload 放在 `X-PAYMENT` 替代標頭。這不代表支援真正的 x402 v1。這會使用測試幣且需要連外，但沒有主網經濟價值。
 
 安全注意事項：
 

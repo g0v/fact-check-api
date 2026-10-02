@@ -103,7 +103,7 @@ API Key Secret 直接送到 facilitator。
 
 1. 第一次呼叫不帶付款標頭，服務回 HTTP `402`。
 2. 從 `PAYMENT-REQUIRED` 讀取 `payTo`、金額、網路與資產資訊。
-3. 使用錢包依需求簽署付款，將編碼後的 `PAYMENT-SIGNATURE` 標頭（相容舊客戶端的 `X-PAYMENT` 也會被 SDK 讀取）加回**同一個 GET／POST 請求**重試。
+3. 使用錢包依需求簽署 x402 v2 付款，將編碼後的 v2 payload 放入 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為同一 v2 payload 的替代標頭，再加回**同一個 GET／POST 請求**重試。`X-PAYMENT` 僅是 v2 替代標頭，不代表支援 x402 v1。
 4. facilitator 先 verify；驗證成功後才轉送 fact-check-core。核心 handler 回應 <400（本 API 正常為 2xx）
    才呼叫 settle，成功後回傳 `PAYMENT-RESPONSE`；核心回 `>=400` 或 fetch 失敗轉成 502 時直接回錯誤，
    不會結算付款。

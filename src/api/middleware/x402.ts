@@ -12,7 +12,7 @@ const DEFAULT_PRICE = "$0.05";
 const DEFAULT_FACILITATOR_URL = "https://www.x402.org/facilitator";
 
 const DESCRIPTION = (payTo: string, network: string, price: string) =>
-  `這是 fact-check-api 的付費查核 API。每次呼叫收取 ${price} USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE（或 X-PAYMENT）標頭，並以相同請求重試。`;
+  `這是 fact-check-api 的付費查核 API。每次呼叫收取 ${price} USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。本 API 僅支援 x402 v2：收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE，或以 X-PAYMENT 作為同一 v2 payload 的替代標頭，並以相同請求重試。`;
 
 function configuredValue(value: string | undefined, fallback: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -141,5 +141,14 @@ export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) 
   }
   if (c.req.method === "OPTIONS") return next();
   const middleware = createX402PaymentMiddleware(c.env);
+  const paymentSignature = c.req.header("PAYMENT-SIGNATURE");
+  const xPayment = c.req.header("X-PAYMENT");
+  // 非空的 PAYMENT-SIGNATURE 永遠優先；X-PAYMENT 只承載同一種 v2 payload。
+  if (!paymentSignature && xPayment) {
+    // 收到的 Headers 可能不可變；替換 Request 的 headers，不 clone／tee 或讀取 body。
+    const headers = new Headers(c.req.raw.headers);
+    headers.set("PAYMENT-SIGNATURE", xPayment);
+    c.req.raw = new Request(c.req.raw, { headers });
+  }
   return middleware(c, next);
 };

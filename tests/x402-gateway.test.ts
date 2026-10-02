@@ -37,10 +37,17 @@ function environment(core: ServiceBindingLike, extra: Partial<ApiBindings> = {})
   };
 }
 
-function facilitatorFetch(options: { invalid?: boolean } = {}) {
+function facilitatorFetch(
+  options: {
+    invalid?: boolean;
+    invalidSignature?: string;
+    onRequest?: (path: string) => void;
+  } = {},
+) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     const path = new URL(request.url).pathname;
+    options.onRequest?.(path);
     if (path.endsWith("/supported")) {
       return Response.json({
         kinds: [{ x402Version: 2, scheme: "exact", network }],
@@ -48,8 +55,16 @@ function facilitatorFetch(options: { invalid?: boolean } = {}) {
       });
     }
     if (path.endsWith("/verify")) {
+      const body = (await request.json()) as {
+        paymentPayload?: { payload?: { signature?: string } };
+      };
+      const invalidSignature =
+        options.invalidSignature !== undefined &&
+        body.paymentPayload?.payload?.signature === options.invalidSignature;
       return Response.json(
-        options.invalid ? { isValid: false, invalidReason: "付款驗證失敗。" } : { isValid: true },
+        options.invalid || invalidSignature
+          ? { isValid: false, invalidReason: "付款驗證失敗。" }
+          : { isValid: true },
       );
     }
     if (path.endsWith("/settle")) {
@@ -76,12 +91,12 @@ async function requiredPayment(core: ServiceBindingLike): Promise<PaymentRequire
   return decodePaymentRequiredHeader(encoded!);
 }
 
-function paymentHeader(required: PaymentRequired) {
+function paymentHeader(required: PaymentRequired, signature = "0xsignature") {
   return encodePaymentSignatureHeader({
     x402Version: 2,
     accepted: required.accepts[0],
     payload: {
-      signature: "0xsignature",
+      signature,
       authorization: {
         from: "0x0000000000000000000000000000000000000001",
         to: required.accepts[0].payTo,
@@ -331,6 +346,125 @@ describe("/api/fact-check x402 閘門", () => {
     expect(
       fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
     ).toHaveLength(2);
+  });
+
+  it("X-PAYMENT 的 x402 v2 payload 會依序完成 verify、core 與 settle", async () => {
+    const events: string[] = [];
+    const fetcher = facilitatorFetch({
+      onRequest(path) {
+        if (path.endsWith("/verify")) events.push("verify");
+        if (path.endsWith("/settle")) events.push("settle");
+      },
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async (request) => {
+      events.push("core");
+      expect(await request.json()).toEqual({ text: "X-PAYMENT v2 主張" });
+      return Response.json({ status: "completed" });
+    });
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-PAYMENT": paymentHeader(required),
+        },
+        body: JSON.stringify({ text: "X-PAYMENT v2 主張" }),
+      },
+      environment(core),
+    );
+
+    expect(response.status).toBe(200);
+    expect(events).toEqual(["verify", "core", "settle"]);
+    expect(response.headers.has("PAYMENT-RESPONSE")).toBe(true);
+  });
+
+  it("無效的 PAYMENT-SIGNATURE 優先於有效的 X-PAYMENT", async () => {
+    const invalidSignature = "0xinvalid-canonical";
+    const validAlternative = "0xvalid-alternative";
+    const events: string[] = [];
+    const fetcher = facilitatorFetch({
+      invalidSignature,
+      onRequest(path) {
+        if (path.endsWith("/verify")) events.push("verify");
+        if (path.endsWith("/settle")) events.push("settle");
+      },
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => {
+      events.push("core");
+      return Response.json({ status: "completed" });
+    });
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-SIGNATURE": paymentHeader(required, invalidSignature),
+          "X-PAYMENT": paymentHeader(required, validAlternative),
+        },
+        body: JSON.stringify({ text: "canonical 優先" }),
+      },
+      environment(core),
+    );
+    const verifyCall = fetcher.mock.calls.find(([input]) => String(input).endsWith("/verify"));
+    const verifyRequest = new Request(
+      verifyCall![0] as string | URL | Request,
+      verifyCall![1] as RequestInit | undefined,
+    );
+    const verifyBody = (await verifyRequest.json()) as {
+      paymentPayload: { payload: { signature: string } };
+    };
+
+    expect(response.status).toBe(402);
+    expect(verifyBody.paymentPayload.payload.signature).toBe(invalidSignature);
+    expect(verifyBody.paymentPayload.payload.signature).not.toBe(validAlternative);
+    expect(events).toEqual(["verify"]);
+    expect(core.fetch).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle"))).toHaveLength(
+      0,
+    );
+  });
+
+  it("拒絕 X-PAYMENT 中的 x402 v1 payload，不進入 core 或 settle", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const required = await requiredPayment(core);
+    const payment = JSON.parse(Buffer.from(paymentHeader(required), "base64").toString("utf8"));
+    const legacyPayload = Buffer.from(
+      JSON.stringify({
+        x402Version: 1,
+        scheme: "exact",
+        network: "base",
+        payload: payment.payload,
+      }),
+    ).toString("base64");
+    const response = await api.request(
+      "/fact-check",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-PAYMENT": legacyPayload,
+        },
+        body: JSON.stringify({ text: "v1 不應付款" }),
+      },
+      environment(core),
+    );
+
+    expect(response.status).toBe(402);
+    expect(core.fetch).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/verify"))).toHaveLength(
+      0,
+    );
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle"))).toHaveLength(
+      0,
+    );
   });
 
   it("核心回傳 502 時不結算，且保留核心錯誤狀態", async () => {
