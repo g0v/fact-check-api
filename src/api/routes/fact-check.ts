@@ -5,6 +5,7 @@ import { x402PaymentMiddleware } from "../middleware/x402";
 import { parseInput } from "../schemas/fact-check";
 import type { ApiEnv, FactCheckInput } from "../types/fact-check";
 import { ApiError } from "../utils/errors";
+import { readLimitedText } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
 
@@ -59,16 +60,11 @@ factCheckRoutes.post("/fact-check", async (c) => {
   if (c.req.header("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     throw new ApiError("INVALID_INPUT", "請使用 application/json 格式。", 400);
   }
-  if (Number(c.req.header("content-length")) > LIMITS.requestBytes)
+  if (Number(c.req.header("content-length")) > LIMITS.requestBytes) {
+    void c.req.raw.body?.cancel().catch(() => undefined);
     throw new ApiError("PAYLOAD_TOO_LARGE", "請求內容過大。", 413);
-  let raw: string;
-  try {
-    raw = await c.req.text();
-    if (new TextEncoder().encode(raw).byteLength > LIMITS.requestBytes)
-      throw new Error("請求內容過大。");
-  } catch {
-    throw new ApiError("INVALID_INPUT", "請求內容過大或無法讀取。", 400);
   }
+  const raw = await readLimitedText(c.req.raw.body, LIMITS.requestBytes, LIMITS.fetchTimeoutMs);
   let value: unknown;
   try {
     value = JSON.parse(raw);
