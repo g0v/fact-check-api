@@ -1,5 +1,8 @@
 const CLAIM_KEY = "payment-claim";
 const MAX_DATE_MS = 8.64e15;
+// 與 middleware/payment-claim.ts 的 CLAIM_TTL_MAX_MS 同步：上限防止攻擊者
+// 以遙遠的 expiresAt 免費長期占用 DO 與 alarm。縱深防禦，不依賴單一檢查點。
+const MAX_CLAIM_TTL_MS = 3_600_000;
 const RESERVATION_ID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/;
 
 // 僅描述本服務實際使用的物件狀態，避免依賴此專案未提供的 Worker 全域型別。
@@ -156,7 +159,9 @@ export class PaymentClaimDO {
       typeof expiresAt === "number" &&
       Number.isSafeInteger(expiresAt) &&
       Math.abs(expiresAt) <= MAX_DATE_MS &&
-      expiresAt > now
+      expiresAt > now &&
+      // 拒絕遙遠未來的效期：合法 client 應在短時間內使用 authorization。
+      expiresAt - now <= MAX_CLAIM_TTL_MS
     );
   }
 }

@@ -115,6 +115,7 @@ function paymentHeader(
   signature = "0xsignature",
   nonce = "0x0000000000000000000000000000000000000000000000000000000000000000",
   from = "0x0000000000000000000000000000000000000001",
+  validBeforeOverride?: string,
 ) {
   return encodePaymentSignatureHeader({
     x402Version: 2,
@@ -126,7 +127,7 @@ function paymentHeader(
         to: required.accepts[0].payTo,
         value: required.accepts[0].amount,
         validAfter: "0",
-        validBefore: String(Math.floor(Date.now() / 1000) + 300),
+        validBefore: validBeforeOverride ?? String(Math.floor(Date.now() / 1000) + 300),
         nonce,
       },
     },
@@ -833,6 +834,34 @@ describe("/api/fact-check x402 閘門", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: "INVALID_PAYMENT" });
     expect(core.fetch).not.toHaveBeenCalled();
+  });
+
+  it("validBefore 超過 TTL 上限的授權回 400，不進入 claim、core 或 settle", async () => {
+    const fetcher = facilitatorFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const required = await requiredPayment(core);
+    const farFuture = paymentHeader(
+      required,
+      "0xfar-future",
+      `0x${"01".repeat(32)}`,
+      undefined,
+      String(Math.floor(Date.now() / 1000) + 3_601),
+    );
+    const response = await api.request(
+      "/fact-check?text=效期過長",
+      { headers: { "PAYMENT-SIGNATURE": farFuture } },
+      environment(core),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "INVALID_PAYMENT" });
+    expect(core.fetch).not.toHaveBeenCalled();
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/verify"))).toHaveLength(
+      1,
+    );
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle"))).toHaveLength(
+      0,
+    );
   });
 
   describe.each(["PAY_TO", "X402_NETWORK", "X402_PRICE", "FACILITATOR_URL"] as const)(

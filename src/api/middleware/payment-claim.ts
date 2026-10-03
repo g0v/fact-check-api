@@ -8,6 +8,10 @@ export type ClaimedPayment = {
   releaseReservation(): Promise<void>;
 };
 
+// claim 與地址占位的最長效期：client 生成 authorization 後應立即使用，
+// 上限防止攻擊者以遙遠 validBefore 免費建立長期占用 DO 的 claim（資源放大）。
+const CLAIM_TTL_MAX_MS = 3_600_000;
+
 // 僅在 SDK 驗證付款成功後呼叫；簽章、JSON 排序、資源描述與標頭別名不影響 authorization 身分。
 export async function claimVerifiedPayment(
   env: ApiBindings,
@@ -60,9 +64,11 @@ export async function claimVerifiedPayment(
     if (
       !Number.isSafeInteger(expiresAt) ||
       expiresAt > 8_640_000_000_000_000 ||
+      // TTL 上限防止攻擊者以遙遠的 validBefore 免費長期占用 claim 與地址占位物件。
+      expiresAt - Date.now() > CLAIM_TTL_MAX_MS ||
       validBeforeMs <= Date.now()
     ) {
-      throw new Error("付款授權已過期或效期無法處理。");
+      throw new Error("付款授權已過期、效期過長或無法處理。");
     }
     const identity = `eip3009:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}:${authorization.nonce.toLowerCase()}`;
     const accountIdentity = `eip3009:account:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}`;

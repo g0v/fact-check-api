@@ -103,10 +103,10 @@ describe("付款認領持久物件", () => {
     );
   });
 
-  it("拒絕過期、不安全整數與超出日期範圍的期限且不建立認領", async () => {
+  it("拒絕過期、不安全整數、超出日期範圍與超過 TTL 上限的期限且不建立認領", async () => {
     const namespace = paymentClaimNamespace();
     const id = namespace.idFromName("invalid-expiry");
-    const invalidExpiries = [FIXED_NOW - 1, FIXED_NOW + 0.5, 8.64e15 + 1];
+    const invalidExpiries = [FIXED_NOW - 1, FIXED_NOW + 0.5, 8.64e15 + 1, FIXED_NOW + 3_600_001];
 
     for (const expiresAt of invalidExpiries) {
       const response = await postClaim(namespace, id, expiresAt);
@@ -207,6 +207,20 @@ describe("付款認領持久物件", () => {
         ).json()
       ).reserved,
     ).toBe(false);
+  });
+
+  it("占位拒絕超過 TTL 上限的期限且不占用地址", async () => {
+    const namespace = paymentClaimNamespace();
+    const id = namespace.idFromName("reservation-ttl-cap");
+    const response = await postReservation(
+      namespace,
+      id,
+      "d".repeat(64),
+      undefined,
+      FIXED_NOW + 3_600_001,
+    );
+    expect(response.status).toBe(400);
+    expect((await (await postReservation(namespace, id)).json()).reserved).toBe(true);
   });
 
   it.each(["0", "-1", "1.5", "01", (2n ** 256n).toString(), null])(
