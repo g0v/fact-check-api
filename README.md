@@ -106,9 +106,17 @@ API Key Secret 直接送到 facilitator。
 1. 第一次呼叫不帶付款標頭，服務回 HTTP `402`。
 2. 從 `PAYMENT-REQUIRED` 讀取 `payTo`、金額、網路與資產資訊。
 3. 使用錢包依需求簽署 x402 v2 付款，將編碼後的 v2 payload 放入 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為同一 v2 payload 的替代標頭，再加回**同一個 GET／POST 請求**重試。`X-PAYMENT` 僅是 v2 替代標頭，不代表支援 x402 v1。
-4. facilitator 先 verify；驗證成功後才轉送 fact-check-core。核心 handler 回應 <400（本 API 正常為 2xx）
-   才呼叫 settle，成功後回傳 `PAYMENT-RESPONSE`；核心回 `>=400` 或 fetch 失敗轉成 502 時直接回錯誤，
-   不會結算付款。
+4. facilitator 先 verify；驗證成功後，`PAYMENT_CLAIM_DO` 以 EIP-3009 authorization 的
+   `network + asset + from + nonce` 取得持久化原子 claim，只有成功取得 claim 的請求才轉送
+   fact-check-core。核心 handler 回應 <400（本 API 正常為 2xx）才呼叫 settle，成功後回傳
+   `PAYMENT-RESPONSE`；核心回 `>=400` 或 fetch 失敗轉成 502 時直接回錯誤，不會結算付款。
+5. 同一 authorization 的並發／重放請求回 `409 PAYMENT_ALREADY_CLAIMED`，不進入 core、
+   不 settle；`PAYMENT-SIGNATURE` 與 `X-PAYMENT` 共用相同 claim。claim 保留到授權
+   `validBefore` 到期後 60 秒才由 alarm 清理，過期授權不能重新進入 core。core／settle 失敗、
+   結算結果不明或 Worker 中斷時不釋放 claim；重試須用新 nonce 重新簽署，不代表先前一定已扣款。
+   這是一次性查核嘗試，不是可重用的短期付款租約，也不會快取或重送先前結果。
+6. `PAYMENT_CLAIM_DO` 是必要的 Durable Object binding；未綁定、服務或儲存出錯時回
+   `500 PAYMENT_CLAIM_UNAVAILABLE`，不會降級成 isolate 內的鎖或放行 core。
 
 付費端點提供寬鬆瀏覽器 CORS：`Access-Control-Allow-Origin: *`，預檢允許 `Content-Type`、`PAYMENT-SIGNATURE` 與 `X-PAYMENT`，並 expose `PAYMENT-REQUIRED`、`PAYMENT-RESPONSE`、`X-Request-Id` 與 `Cache-Control`。
 

@@ -19,6 +19,7 @@ export type ApiBindings = {
   FACILITATOR_AUTH_TOKEN?: string;
   CDP_API_KEY_ID?: string;
   CDP_API_KEY_SECRET?: string;
+  PAYMENT_CLAIM_DO?: DurableObjectNamespaceLike;
   RATE_LIMITER?: {
     limit(options: { key: string }): Promise<{ success: boolean }>;
   };

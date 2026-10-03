@@ -9,7 +9,8 @@
 3. `middleware/x402.ts`：`@x402/hono` 設定、EVM exact scheme、必要付款 vars 與 facilitator URL／認證。
 4. `routes/demo.ts`：免費 facade；不要把此路由改成付費或移除 Origin guard、CORS、`ipRateLimit`。
 5. `middleware/cors.ts`、`middleware/origin.ts`、`middleware/rate-limit.ts`：免費 demo 的既有守護，以及付費端點的寬鬆 CORS。
-6. `types/fact-check.ts`：service binding、付款設定與 rate-limit binding 的最小型別。
+6. `services/payment-claim-do.ts`、`middleware/payment-claim.ts`：跨 isolate 的持久化原子付款 claim、authorization 識別與到期清理。
+7. `types/fact-check.ts`：service binding、付款設定與 Durable Object binding 的最小型別。
 
 ## x402 閘門
 
@@ -20,8 +21,15 @@
 - 每個請求都要重新付款，價格使用明確設定的 `X402_PRICE`。
 - `FACILITATOR_AUTH_TOKEN` 是其他 facilitator 可選的固定 Bearer token。
 - `CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 是 CDP Secret API Key，必須成對設定。
+- `PAYMENT_CLAIM_DO` 是必要的付款防重放 binding；未綁定、呼叫失敗或回應格式錯誤時，回 `500 PAYMENT_CLAIM_UNAVAILABLE`，不進入 core。
 
-本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。SDK 先呼叫 facilitator `verify`，再讓請求進入路由與 core；handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
+本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。順序為 `verify → atomic claim → handler/core → settle`：SDK 驗證成功後，先透過 `PAYMENT_CLAIM_DO` 原子認領 EIP-3009 authorization，成功者才進入路由與 core；驗證失敗不占用 claim。handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
+
+付款身分採 `network + asset + from + nonce` 正規化後的 SHA-256；EVM 地址與 bytes32 nonce 統一小寫、chain ID 轉成十進位。付款標頭別名、JSON 排序、簽章字串、資源描述與查核本文都不影響 key，不能換一個 envelope 繞過同一 authorization 的 claim。目前付費 USDC 路由使用 EIP-3009；無法建立防重放身分或已過期的授權回 `400 INVALID_PAYMENT`，不放行 core。
+
+每個 key 對應一顆 `PaymentClaimDO`，在 SQLite KV transaction 中原子寫入 claim 與 alarm；不是記憶體鎖，物件回收或 Worker 重啟不會失去 claim。重複付款回 `409 PAYMENT_ALREADY_CLAIMED`，不執行 core 或 settle。claim 的 TTL 是 authorization 的 `validBefore` 加 60 秒，完整涵蓋付款效期；到期 alarm 刪除儲存，早到／舊 alarm 則依目前有效期限重新安排。
+
+不提供 release：core 回錯誤、settle 失敗、結算結果不明或 Worker／core 卡死時，claim 仍保留到授權到期。若採短租約到期後重新放行，舊 core 可能仍執行，會重新引入成本放大漏洞。失敗後需用新 nonce 簽署重試；core 失敗仍不結算，但同一授權只能發起一次查核嘗試。所有提供相同付款入口的 isolate 必須共享 `PAYMENT_CLAIM_DO` namespace；多 Worker 部署相同 paywall 時也必須共享，獨立 namespace 無法互相阻擋重放。
 
 付費查核只接受 GET／POST；OPTIONS 預檢不進入付款流程。HEAD 一律回 `405 Method Not Allowed`，並附上 `Allow: GET, POST, OPTIONS`，不建立付款 middleware，也不呼叫 facilitator 或 core。Hono 會把 HEAD 分派給 GET handler，但保留原始請求方法，因此必須在進入 x402 SDK 前明確阻擋，避免 HEAD 未命中付款規則卻觸發查核。
 

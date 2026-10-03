@@ -26,6 +26,8 @@
     "bindings": [
       // 議題 #25：同 IP 精準冷卻用的 Durable Object（每個 IP key 一顆）。
       { "name": "RATE_LIMIT_DO", "class_name": "RateLimiterDO" },
+      // 每筆付款授權的持久化原子 claim，禁止跨 isolate 重放進入 core。
+      { "name": "PAYMENT_CLAIM_DO", "class_name": "PaymentClaimDO" },
     ],
   },
   // 議題 #25：第一層限流，Cloudflare 內建 Rate Limiting binding，便宜、per-PoP；
@@ -39,6 +41,7 @@
     { "tag": "v1", "new_sqlite_classes": ["UsageBudget"] },
     { "tag": "v2", "new_sqlite_classes": ["RateLimiterDO"] },
     { "tag": "v3", "deleted_classes": ["UsageBudget"] },
+    { "tag": "v4", "new_sqlite_classes": ["PaymentClaimDO"] },
   ],
   "observability": {
     "enabled": true,

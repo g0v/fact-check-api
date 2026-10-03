@@ -5,6 +5,8 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import type { Network } from "@x402/core/types";
 import type { MiddlewareHandler } from "hono";
 import type { ApiBindings, ApiEnv } from "../types/fact-check";
+import { claimVerifiedPayment } from "./payment-claim";
+import { ApiError } from "../utils/errors";
 
 const DESCRIPTION = (payTo: string, network: string, price: string) =>
   `這是 fact-check-api 的付費查核 API。每次呼叫收取 ${price} USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。本 API 僅支援 x402 v2：收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE，或以 X-PAYMENT 作為同一 v2 payload 的替代標頭，並以相同請求重試。`;
@@ -100,6 +102,9 @@ export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler
   const network = requiredValue(env.X402_NETWORK, "X402_NETWORK") as Network;
   const price = requiredValue(env.X402_PRICE, "X402_PRICE");
   const facilitatorUrl = requiredValue(env.FACILITATOR_URL, "FACILITATOR_URL");
+  if (!env.PAYMENT_CLAIM_DO) {
+    throw new ApiError("PAYMENT_CLAIM_UNAVAILABLE", "付款防重放服務未設定。", 500);
+  }
   const routes = {
     "GET /fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
@@ -151,5 +156,9 @@ export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) 
     headers.set("PAYMENT-SIGNATURE", xPayment);
     c.req.raw = new Request(c.req.raw, { headers });
   }
-  return middleware(c, next);
+  return middleware(c, async () => {
+    // SDK 只在付款通過 verify 後才進入受保護路由；先跨 isolate 原子 claim，再執行 core。
+    await claimVerifiedPayment(c.env, paymentSignature || xPayment);
+    await next();
+  });
 };

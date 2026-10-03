@@ -100,6 +100,7 @@ CDP_API_KEY_SECRET
 - Cloudflare 上同時存在 `CDP_API_KEY_ID` 與 `CDP_API_KEY_SECRET`。
 - Cloudflare 上沒有為這個 CDP 組合設定 `FACILITATOR_AUTH_TOKEN`。
 - `fact-check-core` 位於正確帳號，且 `FACT_CHECK_CORE` service binding 能解析到它。
+- `PAYMENT_CLAIM_DO` 綁定 `PaymentClaimDO`，所有服務同一付款入口的 isolate／Worker 共用相同 namespace；缺少 binding 或 claim 服務失敗時付費請求回 `500 PAYMENT_CLAIM_UNAVAILABLE`，不進入 core。
 - 沒有把 CDP Secret、錢包私鑰或其他 credential 放入 Git diff。
 
 ### Durable Object 遷移警示：`UsageBudget`
@@ -109,6 +110,12 @@ CDP_API_KEY_SECRET
 本次只修改本機設定，尚未將 `v3` migration 套用至 Cloudflare。設定檔或 dry run 都不能證明遠端 migration 已套用或成功，也不能確認遠端目前狀態。之後以此設定執行正式部署時，Cloudflare 會永久刪除 `UsageBudget` 所屬 namespace、其中所有 Durable Object 與全部儲存資料；這不是軟刪除，也沒有復原區。
 
 部署前必須先備份任何需要保留的 `UsageBudget` 資料、確認 Worker 與其他使用者都不再依賴該 namespace，並取得資料／服務負責人對永久刪除的明確核准。在備份、依賴確認及核准完成前，不得執行會套用此 migration 的正式部署。
+
+### 付款防重放 Durable Object
+
+`v4` 以 `new_sqlite_classes: ["PaymentClaimDO"]` 建立付款 authorization 的持久化原子 claim，`PAYMENT_CLAIM_DO` 指向此 class；既有 `v1`、`v2`、`v3` 歷史不改動。這項新增不刪除其他 namespace，但若同次部署尚未套用的 `v3`，上述永久刪除警示仍適用。此次尚未部署，也未驗證遠端 migration。
+
+claim 在 verify 成功後、core 執行前取得；相同 authorization 並發或重放回 `409 PAYMENT_ALREADY_CLAIMED`。記錄保留至 EIP-3009 `validBefore` 加 60 秒，之後 alarm 清理儲存；不因 core／settle 失敗或 Worker 中斷而提前釋放。客戶端須以新 nonce 簽署重試；不能把 TTL 改成較短租約，否則仍在執行的 core 可能被並發重入。
 
 執行專案固定驗證與部署 dry run：
 

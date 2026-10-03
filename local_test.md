@@ -74,14 +74,14 @@ curl -i "http://localhost:5173/api/fact-check?text=local-smoke-test"
 專案刻意沒有 `MOCK_PAYMENT=true` 或「接受任意假簽章」的 runtime 後門。完整的無真錢付款測試由測試程式載入同一套 Hono routes，並在記憶體中替換 facilitator 與 core：
 
 ```bash
-vp test tests/x402-gateway.test.ts
+vp test tests/x402-gateway.test.ts tests/payment-claim-do.test.ts
 ```
 
 這組測試會驗證：
 
 - 未付款請求回 `402`，且 `PAYMENT-REQUIRED` 的 `payTo`、network、amount 正確。
 - 覆寫 `X402_PRICE` 時，`accepts.amount` 與繁中 description 使用同一個價格。
-- 模擬付款簽章後，順序為 facilitator `verify` → core → facilitator `settle`；`X-PAYMENT` 可承載 x402 v2 payload 完成相同流程。
+- 模擬付款簽章後，順序為 facilitator `verify` → 持久化原子 claim → core → facilitator `settle`；`X-PAYMENT` 可承載 x402 v2 payload 完成相同流程。
 - 同時提供兩個付款標頭時，`PAYMENT-SIGNATURE` 優先；無效的 canonical 值不會被有效的 `X-PAYMENT` 掩蓋。
 - x402 v1 payload 不會被當成 v2 付款接受，也不會進入 core 或 settle。
 - verify 失敗時不呼叫 core。
@@ -90,6 +90,10 @@ vp test tests/x402-gateway.test.ts
 - CDP JWT 分別綁定 `supported`、`verify`、`settle` 的 method、host、path，且為短效 token。
 - CDP credentials 缺一或與固定 facilitator token 混用時會 fail closed。
 - `PAY_TO`、`X402_NETWORK`、`X402_PRICE`、`FACILITATOR_URL` 任一未設定、空字串或純空白時，未付款 GET 與帶簽章 POST 都回 `500 INTERNAL_ERROR`；不產生付款要求、不呼叫 facilitator、不進入 core。
+- 完全相同付款並發十次、core 以 barrier 暫停時，只呼叫一次 core，其餘九次回 `409 PAYMENT_ALREADY_CLAIMED`；解除 barrier 後只 settle 一次，完成後重放仍被拒絕，新 nonce 可成功。
+- JSON 排序、資源描述、簽章字串、nonce 大小寫及付款標頭別名不能繞過同一 authorization 的 claim。
+- core 回 `502`／拋例外、settle 失敗／結果不明時不釋放 claim；claim 服務未綁定或失敗時回 `500 PAYMENT_CLAIM_UNAVAILABLE`。
+- DO fixture 使用真實 `PaymentClaimDO` 與依 ID 共用的序列化記憶體儲存，驗證重建仍保留 claim、到期 alarm 清理與早到／舊 alarm 不刪除有效 claim；它不冒充實際 workerd SQLite 的驗證結果。
 
 測試中的簽章、payer、transaction hash 與 Ed25519 key 都是假資料或公開測試向量；`fetch` 與 core binding 均被 mock，不會呼叫 Coinbase、Cloudflare production Worker 或區塊鏈 RPC。
 
