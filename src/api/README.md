@@ -23,13 +23,15 @@
 - `CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 是 CDP Secret API Key，必須成對設定。
 - `PAYMENT_CLAIM_DO` 是必要的付款防重放 binding；未綁定、呼叫失敗或回應格式錯誤時，回 `500 PAYMENT_CLAIM_UNAVAILABLE`，不進入 core。
 
-本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。順序為 `verify → atomic claim → handler/core → settle`：SDK 驗證成功後，先透過 `PAYMENT_CLAIM_DO` 原子認領 EIP-3009 authorization，成功者才進入路由與 core；驗證失敗不占用 claim。handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
+本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。順序為 `verify → address reservation → atomic nonce claim → reverify → handler/core → settle → release reservation`：SDK 驗證成功後，先取得地址占位並原子認領 EIP-3009 authorization，再於占位內透過同一 facilitator 重新 verify，兩次均成功才進入 core。首次驗證失敗不占用 claim；重新驗證失敗或連線失敗回 `400 INVALID_PAYMENT` 或 `502 PAYMENT_VERIFICATION_UNAVAILABLE`，不執行 core，並嘗試釋放地址占位，但已建立的 nonce claim 仍保留。handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
 付款身分採 `network + asset + from + nonce` 正規化後的 SHA-256；EVM 地址與 bytes32 nonce 統一小寫、chain ID 轉成十進位。付款標頭別名、JSON 排序、簽章字串、資源描述與查核本文都不影響 key，不能換一個 envelope 繞過同一 authorization 的 claim。目前付費 USDC 路由僅接受 EIP-3009；payload 必須包含 `authorization` 且不得包含 `permit2Authorization`，即使後者為 `null` 或其他假值也拒絕。純 Permit2、混合授權、無法建立防重放身分或已過期的授權均回 `400 INVALID_PAYMENT`，不建立 claim、不放行 core、不結算。
 
 每個 key 對應一顆 `PaymentClaimDO`，在 SQLite KV transaction 中原子寫入 claim 與 alarm；不是記憶體鎖，物件回收或 Worker 重啟不會失去 claim。重複付款回 `409 PAYMENT_ALREADY_CLAIMED`，不執行 core 或 settle。claim 的 TTL 是 authorization 的 `validBefore` 加 60 秒，完整涵蓋付款效期；到期 alarm 刪除儲存，早到／舊 alarm 則依目前有效期限重新安排。
 
-不提供 release：core 回錯誤、settle 失敗、結算結果不明或 Worker／core 卡死時，claim 仍保留到授權到期。若採短租約到期後重新放行，舊 core 可能仍執行，會重新引入成本放大漏洞。失敗後需用新 nonce 簽署重試；core 失敗仍不結算，但同一授權只能發起一次查核嘗試。所有提供相同付款入口的 isolate 必須共享 `PAYMENT_CLAIM_DO` namespace；多 Worker 部署相同 paywall 時也必須共享，獨立 namespace 無法互相阻擋重放。
+地址占位使用另一顆 `PaymentClaimDO`，key 依 `network + asset + from` 正規化後的 SHA-256 建立，與 nonce claim 的 key 分開。占位記錄授權金額、授權識別與隨機擁有者識別碼，TTL 同樣為 `validBefore` 加 60 秒。目前 facilitator 的 verify 回應不提供可信的可用餘額，因此同一餘額來源一次僅允許一筆付款，而非依推估餘額放行多筆。其他 nonce 回 `409 PAYMENT_IN_PROGRESS`，不建立其 nonce claim，可在先前付款成功結算並釋放占位後以同一授權重試。取得占位後重新 verify，避免使用另一筆結算前的過時驗證結果；不同付款地址可並行。這是本服務的並發控制，無法凍結鏈上資金，也無法阻止錢包在其他服務支出或保證後續結算成功。
+
+nonce claim 不提供 release：同一授權只能發起一次查核嘗試。地址占位僅在 SDK 確認 settle 成功後釋放，且須匹配該次請求的隨機擁有者識別碼，避免延遲的舊釋放清除新占位。core 回錯誤、settle 失敗、結算結果不明或 Worker／core 卡死時，nonce claim 與地址占位均保留到授權到期，不採短租約。若成功結算後釋放失敗，仍交付已付款的結果，地址占位保留到到期；同地址須等待到期後再用新 nonce 重試。所有提供相同付款入口的 isolate 必須共享 `PAYMENT_CLAIM_DO` namespace；多 Worker 部署相同 paywall 時也必須共享，獨立 namespace 無法互相阻擋重放或共用餘額的並發放大。nonce claim 沿用原有 key 與資料格式，更新前建立的 claim 仍有效。
 
 付費查核只接受 GET／POST；OPTIONS 預檢不進入付款流程。HEAD 一律回 `405 Method Not Allowed`，並附上 `Allow: GET, POST, OPTIONS`，不建立付款 middleware，也不呼叫 facilitator 或 core。Hono 會把 HEAD 分派給 GET handler，但保留原始請求方法，因此必須在進入 x402 SDK 前明確阻擋，避免 HEAD 未命中付款規則卻觸發查核。
 

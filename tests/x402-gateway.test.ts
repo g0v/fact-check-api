@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi, afterEach } from "vite-plus/test";
 import {
   decodePaymentRequiredHeader,
   decodePaymentSignatureHeader,
   encodePaymentSignatureHeader,
 } from "@x402/core/http";
-import type { PaymentRequired } from "@x402/core/types";
+import type { PaymentPayload, PaymentRequired } from "@x402/core/types";
 import { x402ExactPermit2ProxyAddress } from "@x402/evm";
 import { api } from "../src/api";
 import app from "../src/index";
@@ -51,6 +52,8 @@ function facilitatorFetch(
     invalidSignature?: string;
     onRequest?: (path: string) => void;
     settleFailure?: "reject" | "throw";
+    verify?: (payment: PaymentPayload) => boolean | Promise<boolean>;
+    onSettle?: () => void | Promise<void>;
   } = {},
 ) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -65,18 +68,21 @@ function facilitatorFetch(
     }
     if (path.endsWith("/verify")) {
       const body = (await request.json()) as {
-        paymentPayload?: { payload?: { signature?: string } };
+        paymentPayload: PaymentPayload;
       };
       const invalidSignature =
         options.invalidSignature !== undefined &&
         body.paymentPayload?.payload?.signature === options.invalidSignature;
+      const isValid =
+        !options.invalid &&
+        !invalidSignature &&
+        (options.verify ? await options.verify(body.paymentPayload) : true);
       return Response.json(
-        options.invalid || invalidSignature
-          ? { isValid: false, invalidReason: "付款驗證失敗。" }
-          : { isValid: true },
+        isValid ? { isValid: true } : { isValid: false, invalidReason: "付款驗證失敗。" },
       );
     }
     if (path.endsWith("/settle")) {
+      await options.onSettle?.();
       if (options.settleFailure === "throw") throw new Error("結算連線中斷，付款結果不明。");
       if (options.settleFailure === "reject") {
         return Response.json({ success: false, errorReason: "結算失敗。", network });
@@ -108,6 +114,7 @@ function paymentHeader(
   required: PaymentRequired,
   signature = "0xsignature",
   nonce = "0x0000000000000000000000000000000000000000000000000000000000000000",
+  from = "0x0000000000000000000000000000000000000001",
 ) {
   return encodePaymentSignatureHeader({
     x402Version: 2,
@@ -115,7 +122,7 @@ function paymentHeader(
     payload: {
       signature,
       authorization: {
-        from: "0x0000000000000000000000000000000000000001",
+        from,
         to: required.accepts[0].payTo,
         value: required.accepts[0].amount,
         validAfter: "0",
@@ -196,7 +203,7 @@ describe("/api/fact-check x402 閘門", () => {
       expect(core.fetch).toHaveBeenCalledTimes(1);
       expect(
         fetcher.mock.calls.filter(([input]) => String(input).endsWith("/verify")),
-      ).toHaveLength(10);
+      ).toHaveLength(11);
       expect(
         fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
       ).toHaveLength(0);
@@ -232,6 +239,365 @@ describe("/api/fact-check x402 閘門", () => {
     );
     expect(fresh.status).toBe(200);
     expect(core.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("餘額僅足一筆時，不同 nonce 並發十次只執行一次 core 與 settle", async () => {
+    let balance = 50_000;
+    let releaseSettle!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      releaseSettle = resolve;
+    });
+    let allDecided!: () => void;
+    const decisions = new Promise<void>((resolve) => {
+      allDecided = resolve;
+    });
+    let count = 0;
+    const noteDecision = () => {
+      if (++count === 10) allDecided();
+    };
+    const fetcher = facilitatorFetch({
+      verify: () => balance >= 50_000,
+      onSettle: async () => {
+        noteDecision();
+        await barrier;
+        balance -= 50_000;
+      },
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const required = await requiredPayment(core);
+    const namespace = paymentClaimNamespace();
+    const headers = Array.from({ length: 10 }, (_, index) =>
+      paymentHeader(required, `0xsignature-${index}`, `0x${index.toString(16).padStart(64, "0")}`),
+    );
+    const pending = headers.map(async (header, index) => {
+      const response = await app.request(
+        index % 2 ? "/api/fact-check?text=共享餘額" : "/api/fact-check",
+        index % 2
+          ? { headers: { "X-PAYMENT": header } }
+          : {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "PAYMENT-SIGNATURE": header },
+              body: JSON.stringify({ text: "共享餘額" }),
+            },
+        environment(core, { PAYMENT_CLAIM_DO: namespace }),
+      );
+      noteDecision();
+      return response;
+    });
+    try {
+      await decisions;
+      expect(core.fetch).toHaveBeenCalledTimes(1);
+      expect(
+        fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
+      ).toHaveLength(1);
+    } finally {
+      releaseSettle();
+    }
+    const responses = await Promise.all(pending);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+    const conflicts = responses.filter((response) => response.status === 409);
+    expect(conflicts).toHaveLength(9);
+    for (const response of conflicts) {
+      expect(await response.json()).toMatchObject({ error: "PAYMENT_IN_PROGRESS" });
+    }
+    const exhausted = await api.request(
+      "/fact-check?text=餘額已扣除",
+      {
+        headers: {
+          "PAYMENT-SIGNATURE": paymentHeader(required, "0xexhausted", `0x${"ff".repeat(32)}`),
+        },
+      },
+      environment(core, { PAYMENT_CLAIM_DO: namespace }),
+    );
+    expect(exhausted.status).toBe(402);
+    expect(core.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("占位涵蓋 settle，地址大小寫共用占位、不同地址可並行，受阻 nonce 可在結算後重試", async () => {
+    let releaseSettle!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      releaseSettle = resolve;
+    });
+    let settleStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      settleStarted = resolve;
+    });
+    let settleCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      facilitatorFetch({
+        onSettle: async () => {
+          if (++settleCount === 1) {
+            settleStarted();
+            await barrier;
+          }
+        },
+      }),
+    );
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const env = environment(core);
+    const required = await requiredPayment(core);
+    const firstHeader = paymentHeader(
+      required,
+      "0xfirst",
+      `0x${"01".repeat(32)}`,
+      `0x${"ab".repeat(20)}`,
+    );
+    const secondHeader = paymentHeader(
+      required,
+      "0xsecond",
+      `0x${"02".repeat(32)}`,
+      `0x${"AB".repeat(20)}`,
+    );
+    const request = (header: string) =>
+      api.request("/fact-check?text=地址占位", { headers: { "PAYMENT-SIGNATURE": header } }, env);
+    const first = request(firstHeader);
+    try {
+      await started;
+      const blocked = await request(secondHeader);
+      expect(blocked.status).toBe(409);
+      expect(await blocked.json()).toMatchObject({ error: "PAYMENT_IN_PROGRESS" });
+      expect(core.fetch).toHaveBeenCalledTimes(1);
+      const independent = await request(paymentHeader(required, "0xother", `0x${"03".repeat(32)}`));
+      expect(independent.status).toBe(200);
+      expect(core.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseSettle();
+    }
+    expect((await first).status).toBe(200);
+    expect((await request(secondHeader)).status).toBe(200);
+    expect((await request(firstHeader)).status).toBe(409);
+    expect(core.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("前一筆已結算後才取得占位的請求，不能沿用結算前的 verify 結果", async () => {
+    let funded = true;
+    let paused = false;
+    let releaseVerify!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      releaseVerify = resolve;
+    });
+    let verifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      verifyStarted = resolve;
+    });
+    const fetcher = facilitatorFetch({
+      verify: async (payment) => {
+        const isValid = funded;
+        if (payment.payload.signature === "0xstale" && !paused) {
+          paused = true;
+          verifyStarted();
+          await barrier;
+        }
+        return isValid;
+      },
+      onSettle: () => {
+        funded = false;
+      },
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const env = environment(core);
+    const required = await requiredPayment(core);
+    const stale = api.request(
+      "/fact-check?text=舊驗證",
+      {
+        headers: {
+          "PAYMENT-SIGNATURE": paymentHeader(required, "0xstale", `0x${"02".repeat(32)}`),
+        },
+      },
+      env,
+    );
+    try {
+      await started;
+      const fresh = await api.request(
+        "/fact-check?text=先完成結算",
+        {
+          headers: {
+            "PAYMENT-SIGNATURE": paymentHeader(required, "0xfresh", `0x${"01".repeat(32)}`),
+          },
+        },
+        env,
+      );
+      expect(fresh.status).toBe(200);
+    } finally {
+      releaseVerify();
+    }
+    const rejected = await stale;
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({ error: "INVALID_PAYMENT" });
+    expect(core.fetch).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle"))).toHaveLength(
+      1,
+    );
+  });
+
+  it.each(["拒絕", "連線失敗"])(
+    "占位內重新驗證%s 時不進入 core，並釋放地址占位",
+    async (failure) => {
+      let verifyCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        facilitatorFetch({
+          verify: () => {
+            if (++verifyCount === 2) {
+              if (failure === "連線失敗") throw new Error("重新驗證連線失敗。");
+              return false;
+            }
+            return true;
+          },
+        }),
+      );
+      const core = coreBinding(async () => Response.json({ status: "completed" }));
+      const env = environment(core);
+      const required = await requiredPayment(core);
+      const rejected = await api.request(
+        "/fact-check?text=重新驗證",
+        {
+          headers: { "PAYMENT-SIGNATURE": paymentHeader(required) },
+        },
+        env,
+      );
+      expect(rejected.status).toBe(failure === "連線失敗" ? 502 : 400);
+      expect(core.fetch).not.toHaveBeenCalled();
+      const fresh = await api.request(
+        "/fact-check?text=新的有效付款",
+        {
+          headers: {
+            "PAYMENT-SIGNATURE": paymentHeader(required, "0xfresh", `0x${"01".repeat(32)}`),
+          },
+        },
+        env,
+      );
+      expect(fresh.status).toBe(200);
+      expect(core.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("結算成功但占位釋放失敗時交付已付款的結果，並阻擋下一個 nonce", async () => {
+    vi.stubGlobal("fetch", facilitatorFetch());
+    const namespace = paymentClaimNamespace();
+    const wrappedNamespace = {
+      idFromName: namespace.idFromName,
+      get(id: unknown) {
+        const stub = namespace.get(id);
+        return {
+          fetch: async (input: string | URL | Request, init?: RequestInit) => {
+            if (new URL(input instanceof Request ? input.url : input).pathname === "/release") {
+              return new Response(null, { status: 503 });
+            }
+            return stub.fetch(input, init);
+          },
+        };
+      },
+    };
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const env = environment(core, { PAYMENT_CLAIM_DO: wrappedNamespace });
+    const required = await requiredPayment(core);
+    const first = await api.request(
+      "/fact-check?text=已付款結果",
+      { headers: { "PAYMENT-SIGNATURE": paymentHeader(required) } },
+      env,
+    );
+    expect(first.status).toBe(200);
+    expect(first.headers.has("PAYMENT-RESPONSE")).toBe(true);
+    const next = await api.request(
+      "/fact-check?text=下一筆",
+      {
+        headers: { "PAYMENT-SIGNATURE": paymentHeader(required, "0xnext", `0x${"01".repeat(32)}`) },
+      },
+      env,
+    );
+    expect(next.status).toBe(409);
+    expect(await next.json()).toMatchObject({ error: "PAYMENT_IN_PROGRESS" });
+    expect(core.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["回應遺失", "格式錯誤"])(
+    "取得地址占位後 nonce claim %s 時不進入 core，且原有 claim 不被釋放",
+    async (failure) => {
+      vi.stubGlobal("fetch", facilitatorFetch());
+      const namespace = paymentClaimNamespace();
+      let failOnce = true;
+      const wrappedNamespace = {
+        idFromName: namespace.idFromName,
+        get(id: unknown) {
+          const stub = namespace.get(id);
+          return {
+            fetch: async (input: string | URL | Request, init?: RequestInit) => {
+              if (
+                new URL(input instanceof Request ? input.url : input).pathname === "/claim" &&
+                failOnce
+              ) {
+                failOnce = false;
+                if (failure === "格式錯誤") return Response.json({ claimed: "true" });
+                await stub.fetch(input, init);
+                throw new Error("nonce claim 寫入後回應遺失。");
+              }
+              return stub.fetch(input, init);
+            },
+          };
+        },
+      };
+      const core = coreBinding(async () => Response.json({ status: "completed" }));
+      const env = environment(core, { PAYMENT_CLAIM_DO: wrappedNamespace });
+      const required = await requiredPayment(core);
+      const header = paymentHeader(required);
+      const request = (payment: string) =>
+        api.request(
+          "/fact-check?text=claim 回應失敗",
+          { headers: { "PAYMENT-SIGNATURE": payment } },
+          env,
+        );
+      const rejected = await request(header);
+      expect(rejected.status).toBe(500);
+      expect(await rejected.json()).toMatchObject({ error: "PAYMENT_CLAIM_UNAVAILABLE" });
+      expect(core.fetch).not.toHaveBeenCalled();
+      if (failure === "回應遺失") {
+        expect((await request(header)).status).toBe(409);
+      }
+      const fresh = await request(paymentHeader(required, "0xfresh", `0x${"01".repeat(32)}`));
+      expect(fresh.status).toBe(200);
+      expect(core.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("更新前既有的 nonce claim 仍拒絕重放，不會因新增地址占位而重新放行", async () => {
+    vi.stubGlobal("fetch", facilitatorFetch());
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const namespace = paymentClaimNamespace();
+    const env = environment(core, { PAYMENT_CLAIM_DO: namespace });
+    const required = await requiredPayment(core);
+    const header = paymentHeader(required);
+    const payment = decodePaymentSignatureHeader(header);
+    const authorization = payment.payload.authorization as Record<string, string>;
+    // 舊版身分格式固定包含 nonce，既有儲存不能被新的地址 key 取代。
+    const identity = `eip3009:${network}:${payment.accepted.asset.toLowerCase()}:${authorization.from}:${authorization.nonce}`;
+    const legacyKey = createHash("sha256").update(identity).digest("hex");
+    await namespace.get(namespace.idFromName(legacyKey)).fetch("https://payment-claim/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expiresAt: Number(authorization.validBefore) * 1000 + 60_000 }),
+    });
+    const replay = await api.request(
+      "/fact-check?text=既有授權重放",
+      { headers: { "PAYMENT-SIGNATURE": header } },
+      env,
+    );
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toMatchObject({ error: "PAYMENT_ALREADY_CLAIMED" });
+    expect(core.fetch).not.toHaveBeenCalled();
+    const fresh = await api.request(
+      "/fact-check?text=新的有效付款",
+      {
+        headers: {
+          "PAYMENT-SIGNATURE": paymentHeader(required, "0xfresh", `0x${"01".repeat(32)}`),
+        },
+      },
+      env,
+    );
+    expect(fresh.status).toBe(200);
   });
 
   it("改寫 JSON 排序、簽章、nonce 大小寫或資源描述不能繞過同一 authorization 的 claim", async () => {
@@ -288,7 +654,8 @@ describe("/api/fact-check x402 閘門", () => {
         );
       });
       const env = environment(core);
-      const signature = paymentHeader(await requiredPayment(core));
+      const required = await requiredPayment(core);
+      const signature = paymentHeader(required);
       const request = () =>
         api.request(
           "/fact-check?text=失敗重放",
@@ -298,6 +665,17 @@ describe("/api/fact-check x402 閘門", () => {
       const first = await request();
       expect(first.status).toBeGreaterThanOrEqual(400);
       expect((await request()).status).toBe(409);
+      const differentNonce = await api.request(
+        "/fact-check?text=不同 nonce 重試",
+        {
+          headers: {
+            "PAYMENT-SIGNATURE": paymentHeader(required, "0xretry", `0x${"02".repeat(32)}`),
+          },
+        },
+        env,
+      );
+      expect(differentNonce.status).toBe(409);
+      expect(await differentNonce.json()).toMatchObject({ error: "PAYMENT_IN_PROGRESS" });
       expect(core.fetch).toHaveBeenCalledTimes(1);
       expect(
         fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
@@ -432,7 +810,7 @@ describe("/api/fact-check x402 閘門", () => {
           env,
         );
         expect(valid.status).toBe(200);
-        expect(get).toHaveBeenCalledTimes(1);
+        expect(get).toHaveBeenCalledTimes(2);
         expect(core.fetch).toHaveBeenCalledTimes(1);
         expect(
           fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
@@ -716,7 +1094,7 @@ describe("/api/fact-check x402 閘門", () => {
     });
     expect(
       fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
-    ).toHaveLength(2);
+    ).toHaveLength(4);
     expect(
       fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
     ).toHaveLength(2);
@@ -751,7 +1129,7 @@ describe("/api/fact-check x402 閘門", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(events).toEqual(["verify", "core", "settle"]);
+    expect(events).toEqual(["verify", "verify", "core", "settle"]);
     expect(response.headers.has("PAYMENT-RESPONSE")).toBe(true);
   });
 
@@ -884,7 +1262,7 @@ describe("/api/fact-check x402 閘門", () => {
       expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(
         fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
       expect(
         fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
       ).toHaveLength(0);
@@ -926,7 +1304,7 @@ describe("/api/fact-check x402 閘門", () => {
     });
     expect(
       fetcher.mock.calls.filter(([request]) => String(request).endsWith("/verify")),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(
       fetcher.mock.calls.filter(([request]) => String(request).endsWith("/settle")),
     ).toHaveLength(0);

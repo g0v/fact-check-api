@@ -1,11 +1,12 @@
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { paymentMiddlewareFromConfig } from "@x402/hono";
+import { decodePaymentResponseHeader } from "@x402/core/http";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import type { Network } from "@x402/core/types";
 import type { MiddlewareHandler } from "hono";
 import type { ApiBindings, ApiEnv } from "../types/fact-check";
-import { claimVerifiedPayment } from "./payment-claim";
+import { claimVerifiedPayment, type ClaimedPayment } from "./payment-claim";
 import { ApiError } from "../utils/errors";
 
 const DESCRIPTION = (payTo: string, network: string, price: string) =>
@@ -93,9 +94,13 @@ function facilitator(env: ApiBindings, url: string) {
   });
 }
 
-const middlewareCache = new WeakMap<ApiBindings, MiddlewareHandler<ApiEnv>>();
+type PaymentMiddlewareConfiguration = {
+  middleware: MiddlewareHandler<ApiEnv>;
+  client: HTTPFacilitatorClient;
+};
+const middlewareCache = new WeakMap<ApiBindings, PaymentMiddlewareConfiguration>();
 
-export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler<ApiEnv> {
+function paymentConfiguration(env: ApiBindings): PaymentMiddlewareConfiguration {
   const cached = middlewareCache.get(env);
   if (cached) return cached;
   const payTo = requiredValue(env.PAY_TO, "PAY_TO");
@@ -127,16 +132,22 @@ export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler
       mimeType: "application/json",
     },
   };
+  const client = facilitator(env, facilitatorUrl);
   const middleware = paymentMiddlewareFromConfig(
     routes,
-    facilitator(env, facilitatorUrl),
+    client,
     [{ network, server: new ExactEvmScheme() }],
     undefined,
     undefined,
     true,
   );
-  middlewareCache.set(env, middleware);
-  return middleware;
+  const configuration = { middleware, client };
+  middlewareCache.set(env, configuration);
+  return configuration;
+}
+
+export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler<ApiEnv> {
+  return paymentConfiguration(env).middleware;
 }
 
 export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) => {
@@ -146,7 +157,7 @@ export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) 
     return c.body(null, 405);
   }
   if (c.req.method === "OPTIONS") return next();
-  const middleware = createX402PaymentMiddleware(c.env);
+  const { middleware, client } = paymentConfiguration(c.env);
   const paymentSignature = c.req.header("PAYMENT-SIGNATURE");
   const xPayment = c.req.header("X-PAYMENT");
   // 非空的 PAYMENT-SIGNATURE 永遠優先；X-PAYMENT 只承載同一種 v2 payload。
@@ -156,9 +167,25 @@ export const x402PaymentMiddleware: MiddlewareHandler<ApiEnv> = async (c, next) 
     headers.set("PAYMENT-SIGNATURE", xPayment);
     c.req.raw = new Request(c.req.raw, { headers });
   }
-  return middleware(c, async () => {
+  let claim: ClaimedPayment | undefined;
+  const result = await middleware(c, async () => {
     // SDK 只在付款通過 verify 後才進入受保護路由；先跨 isolate 原子 claim，再執行 core。
-    await claimVerifiedPayment(c.env, paymentSignature || xPayment);
+    claim = await claimVerifiedPayment(c.env, paymentSignature || xPayment, async (payment) => {
+      const verification = await client.verify(payment, payment.accepted);
+      return verification.isValid;
+    });
     await next();
   });
+  if (claim && c.res.status < 400) {
+    try {
+      // SDK 僅在結算成功後產生成功回應；占位必須涵蓋 core、本文讀取與完整 settle。
+      const paymentResponse = c.res.headers.get("PAYMENT-RESPONSE");
+      if (paymentResponse && decodePaymentResponseHeader(paymentResponse).success === true) {
+        await claim.releaseReservation();
+      }
+    } catch {
+      // 已結算的回應仍交付；無法確認釋放成功時保留占位至到期，不放行下一筆付款。
+    }
+  }
+  return result;
 };
