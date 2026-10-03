@@ -16,6 +16,15 @@ export async function claimVerifiedPayment(
   try {
     if (!header) throw new Error("缺少付款授權。");
     const payment = decodePaymentSignatureHeader(header);
+    // SDK 以欄位是否存在選擇 Permit2；不得用未經該驗證路徑驗證的 authorization 建立 claim。
+    if (
+      typeof payment.payload !== "object" ||
+      payment.payload === null ||
+      !("authorization" in payment.payload) ||
+      "permit2Authorization" in payment.payload
+    ) {
+      throw new Error("付款防重放檢查僅支援 EIP-3009 授權。");
+    }
     const authorization = payment.payload.authorization as
       | { from?: unknown; nonce?: unknown; validBefore?: unknown }
       | undefined;

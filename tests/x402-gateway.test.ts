@@ -6,6 +6,7 @@ import {
   encodePaymentSignatureHeader,
 } from "@x402/core/http";
 import type { PaymentRequired } from "@x402/core/types";
+import { x402ExactPermit2ProxyAddress } from "@x402/evm";
 import { api } from "../src/api";
 import app from "../src/index";
 import type { ApiBindings, ServiceBindingLike } from "../src/api/types/fact-check";
@@ -355,6 +356,89 @@ describe("/api/fact-check x402 閘門", () => {
     );
     expect(valid.status).toBe(200);
     expect(core.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  describe.each(["PAYMENT-SIGNATURE", "X-PAYMENT"])("%s 的付款授權型別", (headerName) => {
+    it.each([
+      ["純 Permit2", false, "完整授權"],
+      ["混合授權", true, "完整授權"],
+      ["Permit2 欄位為 null", true, null],
+      ["Permit2 欄位為 false", true, false],
+      ["Permit2 欄位為 0", true, 0],
+      ["Permit2 欄位為空字串", true, ""],
+      ["缺少授權", false, undefined],
+    ] as const)(
+      "%s 即使通過 verify 也不能進入 claim、core 或 settle",
+      async (label, includeAuthorization, permit2Value) => {
+        const fetcher = facilitatorFetch();
+        vi.stubGlobal("fetch", fetcher);
+        const core = coreBinding(async () => Response.json({ status: "completed" }));
+        const namespace = paymentClaimNamespace();
+        const get = vi.spyOn(namespace, "get");
+        const env = environment(core, { PAYMENT_CLAIM_DO: namespace });
+        const validHeader = paymentHeader(await requiredPayment(core));
+        const payment = decodePaymentSignatureHeader(validHeader);
+        const { authorization: rawAuthorization, ...signedPayload } = payment.payload;
+        const authorization = rawAuthorization as Record<string, string>;
+        const permit2Authorization = {
+          from: authorization.from,
+          permitted: { token: payment.accepted.asset, amount: payment.accepted.amount },
+          spender: x402ExactPermit2ProxyAddress,
+          nonce: "1",
+          deadline: authorization.validBefore,
+          witness: { to: authorization.to, validAfter: "0", extra: `0x${"00".repeat(32)}` },
+        };
+
+        // 模擬 facilitator 已驗證成功；同一 Permit2 授權換上不同 EIP-3009 nonce 仍須被拒絕。
+        const nonces =
+          label === "混合授權"
+            ? [authorization.nonce, `0x${"01".repeat(32)}`]
+            : [authorization.nonce];
+        for (const nonce of nonces) {
+          const header = encodePaymentSignatureHeader({
+            ...payment,
+            payload: {
+              ...signedPayload,
+              ...(includeAuthorization ? { authorization: { ...authorization, nonce } } : {}),
+              ...(permit2Value !== undefined
+                ? {
+                    permit2Authorization:
+                      permit2Value === "完整授權" ? permit2Authorization : permit2Value,
+                  }
+                : {}),
+            },
+          });
+          const response = await api.request(
+            "/fact-check?text=授權型別檢查",
+            { headers: { [headerName]: header } },
+            env,
+          );
+          expect(response.status).toBe(400);
+          expect(await response.json()).toMatchObject({ error: "INVALID_PAYMENT" });
+          expect(response.headers.has("PAYMENT-RESPONSE")).toBe(false);
+        }
+        expect(
+          fetcher.mock.calls.filter(([input]) => String(input).endsWith("/verify")),
+        ).toHaveLength(nonces.length);
+        expect(get).not.toHaveBeenCalled();
+        expect(core.fetch).not.toHaveBeenCalled();
+        expect(
+          fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
+        ).toHaveLength(0);
+
+        const valid = await api.request(
+          "/fact-check?text=有效的 EIP-3009 付款",
+          { headers: { [headerName]: validHeader } },
+          env,
+        );
+        expect(valid.status).toBe(200);
+        expect(get).toHaveBeenCalledTimes(1);
+        expect(core.fetch).toHaveBeenCalledTimes(1);
+        expect(
+          fetcher.mock.calls.filter(([input]) => String(input).endsWith("/settle")),
+        ).toHaveLength(1);
+      },
+    );
   });
 
   it("授權過期後即使 facilitator 仍回有效，也不能在 TTL 清理後進入 core", async () => {

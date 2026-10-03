@@ -25,7 +25,7 @@
 
 本 API 僅支援 x402 v2。每次請求先由 middleware 建立 `PAYMENT-REQUIRED`；付款的 v2 payload 可使用 `PAYMENT-SIGNATURE`，或以 `X-PAYMENT` 作為替代標頭，後者不代表真正的 x402 v1 相容。兩個標頭同時存在時，非空的 `PAYMENT-SIGNATURE` 優先；空值才 fallback 到 `X-PAYMENT`，無效的非空值不會被替代標頭掩蓋。順序為 `verify → atomic claim → handler/core → settle`：SDK 驗證成功後，先透過 `PAYMENT_CLAIM_DO` 原子認領 EIP-3009 authorization，成功者才進入路由與 core；驗證失敗不占用 claim。handler 回應小於 `400` 才呼叫 `settle`，成功後附上 `PAYMENT-RESPONSE`。handler 回 `>=400` 或拋例外時不走正常結算，錯誤留在原本的回應／錯誤流程。
 
-付款身分採 `network + asset + from + nonce` 正規化後的 SHA-256；EVM 地址與 bytes32 nonce 統一小寫、chain ID 轉成十進位。付款標頭別名、JSON 排序、簽章字串、資源描述與查核本文都不影響 key，不能換一個 envelope 繞過同一 authorization 的 claim。目前付費 USDC 路由使用 EIP-3009；無法建立防重放身分或已過期的授權回 `400 INVALID_PAYMENT`，不放行 core。
+付款身分採 `network + asset + from + nonce` 正規化後的 SHA-256；EVM 地址與 bytes32 nonce 統一小寫、chain ID 轉成十進位。付款標頭別名、JSON 排序、簽章字串、資源描述與查核本文都不影響 key，不能換一個 envelope 繞過同一 authorization 的 claim。目前付費 USDC 路由僅接受 EIP-3009；payload 必須包含 `authorization` 且不得包含 `permit2Authorization`，即使後者為 `null` 或其他假值也拒絕。純 Permit2、混合授權、無法建立防重放身分或已過期的授權均回 `400 INVALID_PAYMENT`，不建立 claim、不放行 core、不結算。
 
 每個 key 對應一顆 `PaymentClaimDO`，在 SQLite KV transaction 中原子寫入 claim 與 alarm；不是記憶體鎖，物件回收或 Worker 重啟不會失去 claim。重複付款回 `409 PAYMENT_ALREADY_CLAIMED`，不執行 core 或 settle。claim 的 TTL 是 authorization 的 `validBefore` 加 60 秒，完整涵蓋付款效期；到期 alarm 刪除儲存，早到／舊 alarm 則依目前有效期限重新安排。
 
