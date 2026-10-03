@@ -7,6 +7,7 @@ import {
 
 export type PaymentClaimFixtureNamespace = DurableObjectNamespaceLike & {
   runAlarm(id: unknown): Promise<void>;
+  seedClaim(id: unknown, value: Record<string, unknown>): Promise<void>;
 };
 
 class DurableMemoryStorage implements PaymentClaimStorageLike {
@@ -77,6 +78,10 @@ export function paymentClaimNamespace(): PaymentClaimFixtureNamespace {
     },
     async runAlarm(id) {
       await new PaymentClaimDO(stateForId(id)).alarm();
+    },
+    // 直接寫入儲存，模擬部署更新前以舊規則（無 TTL 上限）建立的 claim／占位。
+    async seedClaim(id, value) {
+      await stateForId(id).storage.put("payment-claim", value);
     },
   };
 }

@@ -115,7 +115,7 @@ CDP_API_KEY_SECRET
 
 `v4` 以 `new_sqlite_classes: ["PaymentClaimDO"]` 建立付款 authorization 的持久化原子 claim，`PAYMENT_CLAIM_DO` 指向此 class；既有 `v1`、`v2`、`v3` 歷史不改動。這項新增不刪除其他 namespace，但若同次部署尚未套用的 `v3`，上述永久刪除警示仍適用。此次尚未部署，也未驗證遠端 migration。
 
-claim 在 verify 成功後、core 執行前取得；相同 authorization 並發或重放回 `409 PAYMENT_ALREADY_CLAIMED`。記錄保留至 EIP-3009 `validBefore` 加 60 秒，且效期上限 1 小時（超過回 `400 INVALID_PAYMENT`），之後 alarm 清理儲存；不因 core／settle 失敗或 Worker 中斷而提前釋放。客戶端須以新 nonce 簽署重試，並使用合理短效期（建議 5 分鐘內）的 `validBefore`；不能把 TTL 改成較短租約，否則仍在執行的 core 可能被並發重入。
+claim 在 verify 成功後、core 執行前取得；相同 authorization 並發或重放回 `409 PAYMENT_ALREADY_CLAIMED`。記錄保留至 EIP-3009 `validBefore` 加 60 秒；新建立的 claim 效期上限 1 小時（超過回 `400 INVALID_PAYMENT`），之後 alarm 清理儲存。alarm 清理判斷只驗格式與過期，不套用 1 小時上限：部署更新前建立的長效 claim 仍擋重放到授權真正到期，不會被提早 alarm 刪除後重新放行。不因 core／settle 失敗或 Worker 中斷而提前釋放。客戶端須以新 nonce 簽署重試，並使用合理短效期（建議 5 分鐘內）的 `validBefore`；不能把 TTL 改成較短租約，否則仍在執行的 core 可能被並發重入。
 
 執行專案固定驗證與部署 dry run：
 

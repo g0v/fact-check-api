@@ -103,6 +103,30 @@ describe("付款認領持久物件", () => {
     );
   });
 
+  it("預存長效 claim 經提早 alarm 後記錄仍在，進入最後 1 小時仍擋重放，到期才清除", async () => {
+    const namespace = paymentClaimNamespace();
+    const id = namespace.idFromName("legacy-long-ttl");
+    // 部署更新前以舊規則（無 TTL 上限）建立的 claim：距今 2 小時。
+    const longExpiresAt = FIXED_NOW + 7_200_000;
+    await namespace.seedClaim(id, { expiresAt: longExpiresAt });
+
+    await namespace.runAlarm(id);
+    // 記錄仍在：短效期新 claim 被既有記錄擋下。
+    expect((await (await postClaim(namespace, id, FIXED_NOW + 60_000)).json()).claimed).toBe(false);
+
+    // 進入最後 1 小時（middleware 的 TTL 檢查此時會通過），alarm 重新安排不清除。
+    vi.setSystemTime(longExpiresAt - 3_600_000 + 60_000);
+    await namespace.runAlarm(id);
+    expect((await (await postClaim(namespace, id, longExpiresAt)).json()).claimed).toBe(false);
+
+    // 授權真正到期後，alarm 清除記錄，之後的新 claim 可建立。
+    vi.setSystemTime(longExpiresAt + 1);
+    await namespace.runAlarm(id);
+    expect((await (await postClaim(namespace, id, longExpiresAt + 60_000)).json()).claimed).toBe(
+      true,
+    );
+  });
+
   it("拒絕過期、不安全整數、超出日期範圍與超過 TTL 上限的期限且不建立認領", async () => {
     const namespace = paymentClaimNamespace();
     const id = namespace.idFromName("invalid-expiry");

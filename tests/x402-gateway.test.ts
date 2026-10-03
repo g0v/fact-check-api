@@ -864,6 +864,56 @@ describe("/api/fact-check x402 閘門", () => {
     );
   });
 
+  it("預存長效 claim 經提早 alarm 後記錄仍在，進入最後 1 小時仍拒絕重放", async () => {
+    vi.stubGlobal("fetch", facilitatorFetch());
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const namespace = paymentClaimNamespace();
+    const env = environment(core, { PAYMENT_CLAIM_DO: namespace });
+    const required = await requiredPayment(core);
+    // 模擬部署更新前以舊規則建立的長效 claim：validBefore 距今 2 小時，超過新上限。
+    const longValidBefore = String(Math.floor(Date.now() / 1000) + 7_200);
+    const longExpiresAt = 7_200_000 + 60_000;
+    const header = paymentHeader(
+      required,
+      "0xlong-lived",
+      `0x${"01".repeat(32)}`,
+      undefined,
+      longValidBefore,
+    );
+    const payment = decodePaymentSignatureHeader(header);
+    const authorization = payment.payload.authorization as Record<string, string>;
+    const identity = `eip3009:eip155:8453:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}:${authorization.nonce.toLowerCase()}`;
+    const legacyKey = createHash("sha256").update(identity).digest("hex");
+    await namespace.seedClaim(namespace.idFromName(legacyKey), {
+      expiresAt: Date.now() + longExpiresAt,
+    });
+
+    // 提早觸發 alarm：記錄仍在未來但距今超過 1 小時，不得被清除；
+    // 同 key 短效期新 claim（另一 nonce）被既有記錄擋下，證明記錄存在。
+    await namespace.runAlarm(namespace.idFromName(legacyKey));
+    const shortNonceClaim = await namespace
+      .get(namespace.idFromName(legacyKey))
+      .fetch("https://payment-claim/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresAt: Date.now() + 60_000 }),
+      });
+    expect((await shortNonceClaim.json()) as { claimed?: boolean }).toMatchObject({
+      claimed: false,
+    });
+
+    // 進入最後 1 小時後，middleware 的 TTL 檢查通過；記錄仍在，仍拒絕重放。
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + longExpiresAt - 3_600_000 + 60_000);
+    const replayNearExpiry = await api.request(
+      "/fact-check?text=最後一小時重放",
+      { headers: { "PAYMENT-SIGNATURE": header } },
+      env,
+    );
+    expect(replayNearExpiry.status).toBe(409);
+    expect(await replayNearExpiry.json()).toMatchObject({ error: "PAYMENT_ALREADY_CLAIMED" });
+    expect(core.fetch).not.toHaveBeenCalled();
+  });
+
   describe.each(["PAY_TO", "X402_NETWORK", "X402_PRICE", "FACILITATOR_URL"] as const)(
     "必要付款設定 %s",
     (key) => {

@@ -1,7 +1,8 @@
 const CLAIM_KEY = "payment-claim";
 const MAX_DATE_MS = 8.64e15;
-// 與 middleware/payment-claim.ts 的 CLAIM_TTL_MAX_MS 同步：上限防止攻擊者
-// 以遙遠的 expiresAt 免費長期占用 DO 與 alarm。縱深防禦，不依賴單一檢查點。
+// 與 middleware/payment-claim.ts 的 CLAIM_TTL_MAX_MS 同步：只約束「新建立的」
+// claim 與占位，防止攻擊者以遙遠 expiresAt 免費長期占用 DO 與 alarm；
+// alarm 清理不套用此上限，既有長效記錄須保留到授權到期。縱深防禦，不依賴單一檢查點。
 const MAX_CLAIM_TTL_MS = 3_600_000;
 const RESERVATION_ID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/;
 
@@ -42,7 +43,7 @@ export class PaymentClaimDO {
 
     const expiresAt =
       typeof body === "object" && body !== null && "expiresAt" in body ? body.expiresAt : undefined;
-    if (!this.isValidExpiry(expiresAt, Date.now())) {
+    if (!this.isNewExpiryValid(expiresAt, Date.now())) {
       return Response.json({ error: "付款授權期限無效或已過期" }, { status: 400 });
     }
 
@@ -50,7 +51,7 @@ export class PaymentClaimDO {
 
     const result = await this.state.storage.transaction(async () => {
       // 等待儲存佇列期間授權可能到期，提交前再次確認。
-      if (!this.isValidExpiry(expiresAt, Date.now())) return "expired" as const;
+      if (!this.isNewExpiryValid(expiresAt, Date.now())) return "expired" as const;
 
       const existing = await this.state.storage.get(CLAIM_KEY);
       if (existing !== undefined) return "claimed" as const;
@@ -85,7 +86,7 @@ export class PaymentClaimDO {
     }
 
     const result = await this.state.storage.transaction(async () => {
-      if (!this.isValidExpiry(expiresAt, Date.now())) return { expired: true };
+      if (!this.isNewExpiryValid(expiresAt, Date.now())) return { expired: true };
       const existing = await this.state.storage.get(CLAIM_KEY);
       if (existing !== undefined) {
         return {
@@ -141,12 +142,21 @@ export class PaymentClaimDO {
       if (
         typeof currentClaim === "object" &&
         currentClaim !== null &&
-        "expiresAt" in currentClaim &&
-        this.isValidExpiry(currentClaim.expiresAt, Date.now())
+        "expiresAt" in currentClaim
       ) {
-        // 提早觸發或舊警報到達時，依目前記錄重新安排，不清除尚有效的認領。
-        await this.state.storage.setAlarm(currentClaim.expiresAt);
-        return;
+        const recorded = currentClaim.expiresAt;
+        // 記錄保留判斷只驗格式與過期，不套用新 claim 的 TTL 上限：
+        // 部署更新前建立的長效 claim 仍須擋重放，直到授權真正到期。
+        if (
+          typeof recorded === "number" &&
+          Number.isSafeInteger(recorded) &&
+          Math.abs(recorded) <= MAX_DATE_MS &&
+          recorded > Date.now()
+        ) {
+          // 提早觸發或舊警報到達時，依目前記錄重新安排，不清除尚有效的認領。
+          await this.state.storage.setAlarm(recorded);
+          return;
+        }
       }
 
       // SQLite 儲存刪除所有資料時，也會移除已過期認領與警報。
@@ -154,13 +164,14 @@ export class PaymentClaimDO {
     });
   }
 
-  private isValidExpiry(expiresAt: unknown, now: number): expiresAt is number {
+  // 新 claim 的期限檢查：拒絕過期與遙遠未來的效期；合法 client 應在短時間內
+  // 使用 authorization。上限防止攻擊者以遙遠 expiresAt 免費長期占用 DO 與 alarm。
+  private isNewExpiryValid(expiresAt: unknown, now: number): expiresAt is number {
     return (
       typeof expiresAt === "number" &&
       Number.isSafeInteger(expiresAt) &&
       Math.abs(expiresAt) <= MAX_DATE_MS &&
       expiresAt > now &&
-      // 拒絕遙遠未來的效期：合法 client 應在短時間內使用 authorization。
       expiresAt - now <= MAX_CLAIM_TTL_MS
     );
   }
