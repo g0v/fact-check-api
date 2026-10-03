@@ -26,10 +26,12 @@ vp install
 cp .dev.vars.example .dev.vars
 ```
 
-本機安全預設應為：
+本機四個必要付款設定應明確提供；production code 不會自動補上測試網、facilitator、收款錢包或價格：
 
 ```dotenv
+PAY_TO=0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB
 X402_NETWORK=eip155:84532
+X402_PRICE=$0.05
 FACILITATOR_URL=https://www.x402.org/facilitator
 ```
 
@@ -87,6 +89,7 @@ vp test tests/x402-gateway.test.ts
 - GET／POST 都會以正確的 POST JSON 轉送 core。
 - CDP JWT 分別綁定 `supported`、`verify`、`settle` 的 method、host、path，且為短效 token。
 - CDP credentials 缺一或與固定 facilitator token 混用時會 fail closed。
+- `PAY_TO`、`X402_NETWORK`、`X402_PRICE`、`FACILITATOR_URL` 任一未設定、空字串或純空白時，未付款 GET 與帶簽章 POST 都回 `500 INTERNAL_ERROR`；不產生付款要求、不呼叫 facilitator、不進入 core。
 
 測試中的簽章、payer、transaction hash 與 Ed25519 key 都是假資料或公開測試向量；`fetch` 與 core binding 均被 mock，不會呼叫 Coinbase、Cloudflare production Worker 或區塊鏈 RPC。
 

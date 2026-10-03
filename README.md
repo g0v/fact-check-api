@@ -47,7 +47,9 @@ vars 設為 `RATE_LIMIT_WINDOW_MS=60000`。部署前必須另外建立 CDP Secre
 Sepolia 公開 facilitator：
 
 ```dotenv
+PAY_TO=0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB
 X402_NETWORK=eip155:84532
+X402_PRICE=$0.05
 FACILITATOR_URL=https://www.x402.org/facilitator
 
 # 改用 CDP 時才填入，而且兩個值必須成對：
@@ -112,9 +114,9 @@ API Key Secret 直接送到 facilitator。
 
 ### 定價與設定
 
-預設值如下，可由 Worker vars 切換：
+以下為 `wrangler.jsonc` 的正式設定，可由 Worker vars 切換；不是 production code 的 runtime fallback。`PAY_TO`、`X402_NETWORK`、`X402_PRICE`、`FACILITATOR_URL` 必須明確提供，未設定、空字串或純空白時，付費 GET／POST 回 `500 INTERNAL_ERROR`，不產生付款要求，也不呼叫 facilitator 或 core；不會自動降級到測試網。
 
-| 變數                     | 預設值                                          | 說明                                     |
+| 變數                     | 正式設定                                        | 說明                                     |
 | ------------------------ | ----------------------------------------------- | ---------------------------------------- |
 | `PAY_TO`                 | `0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB`    | 公開收款錢包                             |
 | `X402_NETWORK`           | `eip155:8453`                                   | Base mainnet（CAIP-2）                   |

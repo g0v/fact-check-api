@@ -16,6 +16,8 @@
 
 `PAY_TO` 必須在部署前再次確認為實際要收款的 Base 錢包地址。正式 mainnet 組合不能改用只支援 Base Sepolia 的公開 x402.org facilitator。
 
+上述四個付款設定都是必要值。任何 deployment environment 若漏掉 `PAY_TO`、`X402_NETWORK`、`X402_PRICE` 或 `FACILITATOR_URL`（包含空字串／純空白），付費 GET／POST 會回 `500 INTERNAL_ERROR`，不產生付款要求，也不呼叫 facilitator 或 core；程式不會 fallback 到 Base Sepolia 或公開 x402.org facilitator。preview／其他 environment 也必須明確提供付款設定。
+
 ## 一、準備帳號與資源
 
 部署前需要：

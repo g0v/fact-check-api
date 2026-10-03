@@ -6,7 +6,7 @@
 
 1. `index.ts`：request ID、`Cache-Control: no-store` 與統一錯誤回應。
 2. `routes/fact-check.ts`：GET／POST 輸入驗證、GET→POST core 轉換與 x402 閘門。
-3. `middleware/x402.ts`：`@x402/hono` 設定、EVM exact scheme、facilitator URL／認證與 vars 預設值。
+3. `middleware/x402.ts`：`@x402/hono` 設定、EVM exact scheme、必要付款 vars 與 facilitator URL／認證。
 4. `routes/demo.ts`：免費 facade；不要把此路由改成付費或移除 Origin guard、CORS、`ipRateLimit`。
 5. `middleware/cors.ts`、`middleware/origin.ts`、`middleware/rate-limit.ts`：免費 demo 的既有守護，以及付費端點的寬鬆 CORS。
 6. `types/fact-check.ts`：service binding、付款設定與 rate-limit binding 的最小型別。
@@ -15,10 +15,9 @@
 
 付款設定由 Worker vars／secrets 注入：
 
-- `PAY_TO` 預設為公開收款錢包。
-- 程式無 vars 時安全回退到 `eip155:84532` 與公開 facilitator；正式 `wrangler.jsonc` 明確使用
-  `eip155:8453`（Base mainnet）與 Coinbase CDP。
-- `X402_PRICE` 預設 `$0.05`，每個請求都要重新付款。
+- `PAY_TO`、`X402_NETWORK`、`X402_PRICE`、`FACILITATOR_URL` 都是必要設定；未設定、空字串或純空白時，GET／POST 回 `500 INTERNAL_ERROR`，不產生付款要求，也不呼叫 facilitator 或 core。
+- production code 不提供收款錢包、價格、測試網或公開 facilitator 的 fallback。正式 `wrangler.jsonc` 明確使用 `eip155:8453`（Base mainnet）與 Coinbase CDP；本機測試網設定放在 `.dev.vars.example`。
+- 每個請求都要重新付款，價格使用明確設定的 `X402_PRICE`。
 - `FACILITATOR_AUTH_TOKEN` 是其他 facilitator 可選的固定 Bearer token。
 - `CDP_API_KEY_ID`、`CDP_API_KEY_SECRET` 是 CDP Secret API Key，必須成對設定。
 

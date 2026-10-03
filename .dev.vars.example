@@ -1,5 +1,7 @@
-# 本機預設使用不需憑證的 Base Sepolia 公開 facilitator。
+# 本機明確使用不需憑證的 Base Sepolia 公開 facilitator；四個付款設定都必須提供。
+PAY_TO=0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB
 X402_NETWORK=eip155:84532
+X402_PRICE=$0.05
 FACILITATOR_URL=https://www.x402.org/facilitator
 
 # 改用 Coinbase CDP facilitator 時，才填入這一組 Secret API Key。

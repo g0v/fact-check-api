@@ -137,6 +137,50 @@ describe("/api/fact-check x402 閘門", () => {
     expect(core.fetch).not.toHaveBeenCalled();
   });
 
+  describe.each(["PAY_TO", "X402_NETWORK", "X402_PRICE", "FACILITATOR_URL"] as const)(
+    "必要付款設定 %s",
+    (key) => {
+      it.each([
+        ["未設定", undefined],
+        ["空字串", ""],
+        ["純空白", " \t\n "],
+      ] as const)("%s 時回 500，不建立付款要求或進入 core", async (_label, value) => {
+        const fetcher = facilitatorFetch();
+        vi.stubGlobal("fetch", fetcher);
+        const core = coreBinding(async () => Response.json({ ok: true }));
+        const required = await requiredPayment(core);
+        const signature = paymentHeader(required);
+        fetcher.mockClear();
+        const missingEnvironment = environment(core, { [key]: value });
+
+        const responses = [
+          await app.request("/api/fact-check?text=設定缺漏", {}, missingEnvironment),
+          await app.request(
+            "/api/fact-check",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "PAYMENT-SIGNATURE": signature,
+              },
+              body: JSON.stringify({ text: "設定缺漏" }),
+            },
+            missingEnvironment,
+          ),
+        ];
+
+        for (const response of responses) {
+          expect(response.status).toBe(500);
+          expect(response.headers.has("PAYMENT-REQUIRED")).toBe(false);
+          expect(response.headers.has("PAYMENT-RESPONSE")).toBe(false);
+          expect(await response.json()).toMatchObject({ status: "error", error: "INTERNAL_ERROR" });
+        }
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(core.fetch).not.toHaveBeenCalled();
+      });
+    },
+  );
+
   it("付款說明會使用實際設定的價格", async () => {
     const fetcher = facilitatorFetch();
     vi.stubGlobal("fetch", fetcher);

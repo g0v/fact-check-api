@@ -6,16 +6,17 @@ import type { Network } from "@x402/core/types";
 import type { MiddlewareHandler } from "hono";
 import type { ApiBindings, ApiEnv } from "../types/fact-check";
 
-const DEFAULT_PAY_TO = "0x06818A198832EcEE8Dc8f9B1492C8915921EfEAB";
-const DEFAULT_NETWORK = "eip155:84532";
-const DEFAULT_PRICE = "$0.05";
-const DEFAULT_FACILITATOR_URL = "https://www.x402.org/facilitator";
-
 const DESCRIPTION = (payTo: string, network: string, price: string) =>
   `這是 fact-check-api 的付費查核 API。每次呼叫收取 ${price} USDC，請將款項支付至 ${payTo}，使用 ${network} 網路。本 API 僅支援 x402 v2：收到 402 回應後，依 PAYMENT-REQUIRED 內容產生 PAYMENT-SIGNATURE，或以 X-PAYMENT 作為同一 v2 payload 的替代標頭，並以相同請求重試。`;
 
-function configuredValue(value: string | undefined, fallback: string): string {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+function configuredValue(value: string | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function requiredValue(value: string | undefined, name: string): string {
+  const configured = configuredValue(value);
+  if (!configured) throw new Error(`付款設定 ${name} 不可缺少或為空白。`);
+  return configured;
 }
 
 function isCdpFacilitatorUrl(value: string): boolean {
@@ -50,11 +51,10 @@ function cdpAuthHeaders(apiKeyId: string, apiKeySecret: string, baseUrl: string)
   };
 }
 
-function facilitator(env: ApiBindings) {
-  const url = configuredValue(env.FACILITATOR_URL, DEFAULT_FACILITATOR_URL);
-  const authToken = configuredValue(env.FACILITATOR_AUTH_TOKEN, "");
-  const apiKeyId = configuredValue(env.CDP_API_KEY_ID, "");
-  const apiKeySecret = configuredValue(env.CDP_API_KEY_SECRET, "");
+function facilitator(env: ApiBindings, url: string) {
+  const authToken = configuredValue(env.FACILITATOR_AUTH_TOKEN);
+  const apiKeyId = configuredValue(env.CDP_API_KEY_ID);
+  const apiKeySecret = configuredValue(env.CDP_API_KEY_SECRET);
   const hasApiKeyId = apiKeyId.length > 0;
   const hasApiKeySecret = apiKeySecret.length > 0;
   const hasCdpKeys = apiKeyId.length > 0 && apiKeySecret.length > 0;
@@ -96,9 +96,10 @@ const middlewareCache = new WeakMap<ApiBindings, MiddlewareHandler<ApiEnv>>();
 export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler<ApiEnv> {
   const cached = middlewareCache.get(env);
   if (cached) return cached;
-  const payTo = configuredValue(env.PAY_TO, DEFAULT_PAY_TO);
-  const network = configuredValue(env.X402_NETWORK, DEFAULT_NETWORK) as Network;
-  const price = configuredValue(env.X402_PRICE, DEFAULT_PRICE);
+  const payTo = requiredValue(env.PAY_TO, "PAY_TO");
+  const network = requiredValue(env.X402_NETWORK, "X402_NETWORK") as Network;
+  const price = requiredValue(env.X402_PRICE, "X402_PRICE");
+  const facilitatorUrl = requiredValue(env.FACILITATOR_URL, "FACILITATOR_URL");
   const routes = {
     "GET /fact-check": {
       accepts: { scheme: "exact", payTo, price, network },
@@ -123,7 +124,7 @@ export function createX402PaymentMiddleware(env: ApiBindings): MiddlewareHandler
   };
   const middleware = paymentMiddlewareFromConfig(
     routes,
-    facilitator(env),
+    facilitator(env, facilitatorUrl),
     [{ network, server: new ExactEvmScheme() }],
     undefined,
     undefined,
