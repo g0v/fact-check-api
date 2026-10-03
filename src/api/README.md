@@ -59,7 +59,10 @@ service binding 未設定或 `fetch()` 拋出例外時回 `502 UPSTREAM_UNAVAILA
 - POST body 原樣轉成 core `/fact-check` request。
 
 `RATE_LIMITER` 仍是每 10 秒 30 次的洪水層；`RATE_LIMIT_WINDOW_MS` 可覆寫 60 秒的
-`RATE_LIMIT_DO` 冷卻時間。這些守護只屬於免費 demo；付費查核完全由 x402 負責付款，
+`RATE_LIMIT_DO` 冷卻時間。`RateLimiterDO` 在儲存交易中讀取、判斷並持久化 `lastAllowedMs`，
+物件閒置回收或重新啟動不會提前結束冷卻；同一 IP 的並發請求只放行一次，被拒絕的請求不延長冷卻。
+未綁定或限流服務發生錯誤時，仍沿用該層放行的既有政策。
+這些守護只屬於免費 demo；付費查核完全由 x402 負責付款，
 不能把 demo 的 Origin 或 IP 限制套回付費路由。
 
 ## 輸入限制與錯誤

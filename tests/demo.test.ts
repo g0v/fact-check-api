@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { api } from "../src/api";
-import { RateLimiterDO } from "../src/api/services/rate-limiter-do";
+import { rateLimitNamespace } from "./fixtures/rate-limiter";
 import type { ApiBindings, ServiceBindingLike } from "../src/api/types/fact-check";
 
 function coreBinding(handler?: (request: Request) => Promise<Response>): ServiceBindingLike {
@@ -14,16 +14,6 @@ function coreBinding(handler?: (request: Request) => Promise<Response>): Service
 
 function environment(FACT_CHECK_CORE: ServiceBindingLike): ApiBindings {
   return { FACT_CHECK_CORE };
-}
-
-function rateLimitNamespace(): ApiBindings["RATE_LIMIT_DO"] {
-  const limiter = new RateLimiterDO();
-  return {
-    idFromName: (name) => name,
-    get: () => ({
-      fetch: (request, init) => limiter.fetch(new Request(request, init)),
-    }),
-  };
 }
 
 describe("/api/demo", () => {
