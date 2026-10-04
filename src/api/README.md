@@ -41,6 +41,8 @@ CDP；`generateJwt()` 會用 CDP Key ID／Secret 為 `supported`、`verify`、`s
 `FACILITATOR_AUTH_TOKEN` 混用。generic facilitator 則使用標準 `HTTPFacilitatorClient`，並實際讀取
 `/supported`，不可再以設定值假裝 facilitator 支援某個網路。
 
+facilitator 回非 JSON 錯誤本文或回應不符合 schema 時，SDK 會把上游回應本文摘錄拼入例外訊息，並原樣放進 `PAYMENT-REQUIRED.error`、`PAYMENT-RESPONSE.errorReason`／`errorMessage` 或 facilitator 502 回應。這些可能含 facilitator 端的私有診斷，因此 facilitator client 以 `sanitizeFacilitatorClient` 包裝：只保留操作名與 HTTP 狀態碼（如 `Facilitator verify failed (500)`），移除上游本文。facilitator 以 JSON 明確回覆的付款診斷（`invalidReason`、`errorReason`、`transaction` 等）不經此路徑，維持原樣以保留必要交易識別。
+
 付費端點 CORS 固定回 `Access-Control-Allow-Origin: *`，預檢允許 `Content-Type`、`PAYMENT-SIGNATURE`、`X-PAYMENT`，並 expose `PAYMENT-REQUIRED`、`PAYMENT-RESPONSE`、`X-Request-Id`、`Cache-Control`。不設 cookie 或 JWT 通行證。
 
 ## core proxy

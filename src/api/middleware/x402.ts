@@ -54,6 +54,51 @@ function cdpAuthHeaders(apiKeyId: string, apiKeySecret: string, baseUrl: string)
   };
 }
 
+// HTTPFacilitatorClient 在 facilitator 回非 JSON／schema 不符時，會把上游回應本文
+// 前 200 字元拼入例外訊息；SDK 又把該訊息原樣放進 PAYMENT-REQUIRED.error、
+// PAYMENT-RESPONSE.errorReason/errorMessage 或 502 body。這些可能含 facilitator
+// 反向代理或應用層的私有診斷。此 wrapper 只保留操作名與 HTTP 狀態碼，移除上游本文；
+// facilitator 以 JSON 明確回覆的付款診斷（VerifyError／SettleError 的 invalidReason、
+// errorReason 等）不經此路徑，維持原樣以保留必要交易識別。
+function sanitizeFacilitatorError(error: unknown, operation: string): Error {
+  if (
+    error instanceof Error &&
+    /^Facilitator (verify|settle|supported) (failed|returned invalid (JSON|data))/.test(
+      error.message,
+    )
+  ) {
+    const status = /\((\d+)\)/.exec(error.message)?.[1];
+    const sanitized = status
+      ? `Facilitator ${operation} failed (${status})`
+      : `Facilitator ${operation} failed`;
+    const wrapped = new Error(sanitized);
+    wrapped.stack = error.stack;
+    return wrapped;
+  }
+  return error instanceof Error ? error : new Error(`Facilitator ${operation} failed`);
+}
+
+// HTTPFacilitatorClient 介面：verify／settle／getSupported 三個呼叫點都需要去敏。
+// 目標方法直接以 target 為 this 綁定，避免 Proxy receiver 造成內部欄位讀不到。
+function sanitizeFacilitatorClient(client: HTTPFacilitatorClient): HTTPFacilitatorClient {
+  return new Proxy(client, {
+    get(target, property) {
+      if (property !== "verify" && property !== "settle" && property !== "getSupported") {
+        return Reflect.get(target, property);
+      }
+      const operation = property === "getSupported" ? "supported" : property;
+      const original = (target[property] as (...callArgs: unknown[]) => unknown).bind(target);
+      return async (...callArgs: unknown[]) => {
+        try {
+          return await original(...callArgs);
+        } catch (error) {
+          throw sanitizeFacilitatorError(error, operation);
+        }
+      };
+    },
+  });
+}
+
 function facilitator(env: ApiBindings, url: string) {
   const authToken = configuredValue(env.FACILITATOR_AUTH_TOKEN);
   const apiKeyId = configuredValue(env.CDP_API_KEY_ID);
@@ -71,27 +116,27 @@ function facilitator(env: ApiBindings, url: string) {
   if (isCdpFacilitatorUrl(url) && !hasCdpKeys) {
     throw new Error("使用 Coinbase CDP facilitator 時必須設定完整的 CDP API key。");
   }
-
-  if (hasCdpKeys) {
-    return new HTTPFacilitatorClient({
-      url,
-      createAuthHeaders: cdpAuthHeaders(apiKeyId, apiKeySecret, url),
-    });
-  }
-
-  const bearerHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
-  return new HTTPFacilitatorClient({
-    url,
-    ...(bearerHeaders
-      ? {
-          createAuthHeaders: async () => ({
-            verify: bearerHeaders,
-            settle: bearerHeaders,
-            supported: bearerHeaders,
-          }),
-        }
-      : {}),
-  });
+  const client = hasCdpKeys
+    ? new HTTPFacilitatorClient({
+        url,
+        createAuthHeaders: cdpAuthHeaders(apiKeyId, apiKeySecret, url),
+      })
+    : (() => {
+        const bearerHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+        return new HTTPFacilitatorClient({
+          url,
+          ...(bearerHeaders
+            ? {
+                createAuthHeaders: async () => ({
+                  verify: bearerHeaders,
+                  settle: bearerHeaders,
+                  supported: bearerHeaders,
+                }),
+              }
+            : {}),
+        });
+      })();
+  return sanitizeFacilitatorClient(client);
 }
 
 type PaymentMiddlewareConfiguration = {

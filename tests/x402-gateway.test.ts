@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi, afterEach } from "vite-plus/test";
 import {
   decodePaymentRequiredHeader,
+  decodePaymentResponseHeader,
   decodePaymentSignatureHeader,
   encodePaymentSignatureHeader,
 } from "@x402/core/http";
@@ -46,14 +47,18 @@ function environment(core: ServiceBindingLike, extra: Partial<ApiBindings> = {})
   };
 }
 
+// facilitator 500 非 JSON 回應中的私有診斷 sentinel；用來驗證付款標頭去敏。
+const DIAGNOSTIC_SENTINEL = "PRIVATE-DIAGNOSTIC-SENTINEL-ABC123";
+
 function facilitatorFetch(
   options: {
     invalid?: boolean;
     invalidSignature?: string;
     onRequest?: (path: string) => void;
-    settleFailure?: "reject" | "throw";
+    settleFailure?: "reject" | "throw" | "server-html";
     verify?: (payment: PaymentPayload) => boolean | Promise<boolean>;
     onSettle?: () => void | Promise<void>;
+    verifyServerHtml?: boolean;
   } = {},
 ) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -67,6 +72,12 @@ function facilitatorFetch(
       });
     }
     if (path.endsWith("/verify")) {
+      if (options.verifyServerHtml) {
+        return new Response(`<html><body>${DIAGNOSTIC_SENTINEL} stack trace</body></html>`, {
+          status: 500,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
       const body = (await request.json()) as {
         paymentPayload: PaymentPayload;
       };
@@ -84,6 +95,12 @@ function facilitatorFetch(
     if (path.endsWith("/settle")) {
       await options.onSettle?.();
       if (options.settleFailure === "throw") throw new Error("結算連線中斷，付款結果不明。");
+      if (options.settleFailure === "server-html") {
+        return new Response(`<html><body>${DIAGNOSTIC_SENTINEL} settle stack trace</body></html>`, {
+          status: 500,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
       if (options.settleFailure === "reject") {
         return Response.json({ success: false, errorReason: "結算失敗。", network });
       }
@@ -683,6 +700,45 @@ describe("/api/fact-check x402 閘門", () => {
       ).toHaveLength(failure.startsWith("settle") ? 1 : 0);
     },
   );
+
+  it("facilitator verify 500 非 JSON 時，PAYMENT-REQUIRED.error 不含上游本文", async () => {
+    const fetcher = facilitatorFetch({ verifyServerHtml: true });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check?text=診斷外洩",
+      { headers: { "PAYMENT-SIGNATURE": paymentHeader(required) } },
+      environment(core),
+    );
+    expect(response.status).toBe(402);
+    const encoded = response.headers.get("PAYMENT-REQUIRED");
+    expect(encoded).toBeTruthy();
+    const decoded = decodePaymentRequiredHeader(encoded!);
+    expect(JSON.stringify(decoded)).not.toContain(DIAGNOSTIC_SENTINEL);
+    expect(decoded.error).toBe("Facilitator verify failed (500)");
+    expect(core.fetch).not.toHaveBeenCalled();
+  });
+
+  it("facilitator settle 回 500 非 JSON 時，PAYMENT-RESPONSE 與本文不含上游本文", async () => {
+    const fetcher = facilitatorFetch({ settleFailure: "server-html" });
+    vi.stubGlobal("fetch", fetcher);
+    const core = coreBinding(async () => Response.json({ status: "completed" }));
+    const required = await requiredPayment(core);
+    const response = await api.request(
+      "/fact-check?text=settle外洩",
+      { headers: { "PAYMENT-SIGNATURE": paymentHeader(required) } },
+      environment(core),
+    );
+    expect(response.status).toBe(402);
+    const encoded = response.headers.get("PAYMENT-RESPONSE");
+    expect(encoded).toBeTruthy();
+    const decoded = decodePaymentResponseHeader(encoded!);
+    expect(decoded.errorReason).toBe("Facilitator settle failed (500)");
+    expect(JSON.stringify(decoded)).not.toContain(DIAGNOSTIC_SENTINEL);
+    expect(await response.text()).not.toContain(DIAGNOSTIC_SENTINEL);
+    expect(core.fetch).toHaveBeenCalledTimes(1);
+  });
 
   it.each(["未綁定", "連線失敗", "錯誤狀態", "無效回應"])(
     "claim 服務%s 時 fail closed",
