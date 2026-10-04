@@ -1,5 +1,7 @@
 # Fact Check API — MVP 工程施工藍圖 v2
 
+> **架構演進（2026-09）**：本文件記錄早期的本機查核 pipeline，現行服務已改為「x402 付費閘門 + `FACT_CHECK_CORE` service binding」架構；請以 [README](../README.md) 與 [API 維護指南](../src/api/README.md) 為準，本歷史規劃不再描述目前部署契約。
+
 > 實作對應議題 #5。依本次需求，API 模組集中於 `src/api`，本文件示例中的 routes／services／prompts／schemas／types／utils 皆位於該目錄；既有 Vue SSR 保留。實際介面、已確認預設及驗收限制見 [API 維護指南](../src/api/README.md)。本文件勾選狀態仍保留為原始施工／正式服務驗收清單，不以模擬測試冒充正式服務驗收。
 
 ## 0. MVP 目標

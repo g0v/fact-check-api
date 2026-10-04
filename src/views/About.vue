@@ -7,23 +7,22 @@ import NavBar from "../components/NavBar.vue";
   <main class="container">
     <h1>關於 Fact Check API</h1>
     <p>
-      本站目前只是 Demo，每日 Workers AI 用量有限，預設每日配額為 10,000 neurons（僅供大約 30
-      次查核）。用量會透過 Durable Object 記錄，達到配額後當日便無法繼續查核。
+      本 Worker 使用 x402 付費閘門保護 <code>/api/fact-check</code>。每次查核收取 0.05
+      USDC。facilitator 先 verify 付款；驗證成功後才透過 <code>FACT_CHECK_CORE</code> service
+      binding 呼叫獨立的 fact-check-core Worker，只有 handler 回應小於 400 才 settle
+      並回傳付款結果。core 回傳錯誤或 fetch 失敗轉成 502 時不會結算付款。
     </p>
     <p>
-      如果要正式使用，請先 fork
-      <a href="https://github.com/g0v/fact-check-api/">本專案</a>，再自行部署到 Cloudflare Workers。
+      首頁表單仍使用免費的 <code>/api/demo</code>，保留 Origin guard、CORS 與 IP 限流（預設每個 IP
+      每 60 秒一次，可由 <code>RATE_LIMIT_WINDOW_MS</code> 覆寫）。正式付費端點設定使用 Base mainnet
+      與 CDP；本機整合測試預設使用 Base Sepolia 公開 facilitator。
     </p>
-    <h2>調整每日用量配額</h2>
+    <h2>自行部署</h2>
     <p>
-      請修改 <code>wrangler.jsonc</code> 的
-      <code>"vars": { "DAILY_NEURON_BUDGET": "10000" }</code>。也可以在 Cloudflare Dashboard
-      設定環境變數覆蓋這個值。
-    </p>
-    <p>
-      預設值定義在 <code>src/api/config.ts</code> 的
-      <code>BUDGET.dailyNeurons</code>，相關配額解析程式碼位於
-      <code>src/api/services/usage-budget.ts</code> 的 <code>resolveDailyLimitNeurons</code>。
+      請設定 <code>PAY_TO</code>、<code>X402_NETWORK</code>、<code>X402_PRICE</code> 與
+      <code>FACILITATOR_URL</code>，並確認 <code>FACT_CHECK_CORE</code> service binding
+      指向可用的核心 Worker。Base mainnet 的 CDP facilitator 需要成對的 Secret API Key ID／Secret，
+      由官方 SDK 產生短效 JWT；公開 x402.org facilitator 僅支援測試網。
     </p>
     <p>
       <a href="https://github.com/g0v/fact-check-api/">查看原始碼</a>

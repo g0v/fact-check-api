@@ -12,7 +12,4 @@ describe("既有主程式整合", () => {
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(await response.text()).toMatch(/<!doctype html>/i);
   });
-  it("掛載 /api/fact-check 的輸入驗證", async () => {
-    expect((await app.request("/api/fact-check", {}, {})).status).toBe(400);
-  });
 });
