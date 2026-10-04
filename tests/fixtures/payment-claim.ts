@@ -23,8 +23,11 @@ class DurableMemoryStorage implements PaymentClaimStorageLike {
     this.values.set(key, value);
   }
 
-  async deleteAll(): Promise<void> {
-    this.values.clear();
+  async delete(key: string): Promise<void> {
+    this.values.delete(key);
+  }
+
+  async deleteAlarm(): Promise<void> {
     this.alarmTime = null;
   }
 

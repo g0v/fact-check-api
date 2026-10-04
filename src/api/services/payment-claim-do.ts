@@ -10,7 +10,8 @@ const RESERVATION_ID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]
 export type PaymentClaimStorageLike = {
   get(key: string): Promise<unknown>;
   put(key: string, value: unknown): Promise<void>;
-  deleteAll(): Promise<void>;
+  delete(key: string): Promise<void>;
+  deleteAlarm(): Promise<void>;
   setAlarm(scheduledTime: number | Date): Promise<void>;
   transaction<T>(operation: () => Promise<T>): Promise<T>;
 };
@@ -128,7 +129,7 @@ export class PaymentClaimDO {
         return false;
       }
       // 隨機識別碼防止延遲的舊結算或釋放請求清除後來建立的新占位。
-      await this.state.storage.deleteAll();
+      await this.deleteStoredClaim();
       return true;
     });
     return Response.json({ released });
@@ -159,9 +160,17 @@ export class PaymentClaimDO {
         }
       }
 
-      // SQLite 儲存刪除所有資料時，也會移除已過期認領與警報。
-      await this.state.storage.deleteAll();
+      // 過期後刪除認領與警報。不可用 deleteAll()：workerd 在 transaction() 內
+      // 呼叫它會拋錯並回滾，占位與過期記錄就會永久留下。
+      await this.deleteStoredClaim();
     });
+  }
+
+  // 本物件只持久化一把 claim key。delete 與 deleteAlarm 都能放進 transaction()，
+  // 失敗時一起回滾；deleteAll() 在 workerd 的交易內不被允許。
+  private async deleteStoredClaim(): Promise<void> {
+    await this.state.storage.delete(CLAIM_KEY);
+    await this.state.storage.deleteAlarm();
   }
 
   // 新 claim 的期限檢查：拒絕過期與遙遠未來的效期；合法 client 應在短時間內

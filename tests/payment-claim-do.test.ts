@@ -148,7 +148,8 @@ describe("付款認領持久物件", () => {
       async put() {
         throw storageError;
       },
-      async deleteAll() {},
+      async delete() {},
+      async deleteAlarm() {},
       async setAlarm() {},
       async transaction(operation) {
         return operation();
