@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { api } from "../src/api";
-import { RateLimiterDO } from "../src/api/services/rate-limiter-do";
+import { rateLimitNamespace } from "./fixtures/rate-limiter";
 import type { ApiBindings, ServiceBindingLike } from "../src/api/types/fact-check";
 
 function coreBinding(handler?: (request: Request) => Promise<Response>): ServiceBindingLike {
@@ -14,16 +14,6 @@ function coreBinding(handler?: (request: Request) => Promise<Response>): Service
 
 function environment(FACT_CHECK_CORE: ServiceBindingLike): ApiBindings {
   return { FACT_CHECK_CORE };
-}
-
-function rateLimitNamespace(): ApiBindings["RATE_LIMIT_DO"] {
-  const limiter = new RateLimiterDO();
-  return {
-    idFromName: (name) => name,
-    get: () => ({
-      fetch: (request, init) => limiter.fetch(new Request(request, init)),
-    }),
-  };
 }
 
 describe("/api/demo", () => {
@@ -140,6 +130,34 @@ describe("/api/demo", () => {
     expect(limited.status).toBe(429);
     expect(await limited.json()).toMatchObject({ error: "RATE_LIMITED" });
     expect(limited.headers.get("Retry-After")).toBe("5");
+    expect(FACT_CHECK_CORE.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("未設定覆寫時免費 demo 預設每個 IP 每 60 秒一次", async () => {
+    const FACT_CHECK_CORE = coreBinding();
+    const env = {
+      ...environment(FACT_CHECK_CORE),
+      RATE_LIMIT_DO: rateLimitNamespace(),
+    };
+    const request = () =>
+      api.request(
+        "/demo",
+        {
+          method: "POST",
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": "application/json",
+            "cf-connecting-ip": "198.51.100.8",
+          },
+          body: JSON.stringify({ text: "測試主張" }),
+        },
+        env,
+      );
+
+    expect((await request()).status).toBe(200);
+    const limited = await request();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
     expect(FACT_CHECK_CORE.fetch).toHaveBeenCalledTimes(1);
   });
 });

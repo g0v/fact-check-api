@@ -1,50 +1,51 @@
 import { Hono, type Context } from "hono";
 import { LIMITS } from "../config";
-import { allowedCrossOrigin, factCheckCors, setFactCheckPreflightCors } from "../middleware/cors";
-import { forbiddenOrigin, postOriginGuard } from "../middleware/origin";
-import { ipRateLimit } from "../middleware/rate-limit";
+import { setPaidFactCheckCors } from "../middleware/cors";
+import { x402PaymentMiddleware } from "../middleware/x402";
 import { parseInput } from "../schemas/fact-check";
-import { cachedFactCheck } from "../services/cached-fact-check";
 import type { ApiEnv, FactCheckInput } from "../types/fact-check";
 import { ApiError } from "../utils/errors";
-import { readLimitedText, withTimeout } from "../utils/http";
+import { readLimitedText } from "../utils/http";
 
 export const factCheckRoutes = new Hono<ApiEnv>();
 
-factCheckRoutes.use("/fact-check", factCheckCors);
-factCheckRoutes.use("/fact-check", postOriginGuard);
-// 議題 #25：GET 與 POST 都以來源 IP 限流；middleware 需在輸入驗證與查核前擋下。
-// 預檢不進入查核流程也不耗用上游資源，若一併計入冷卻視窗，隨後的 POST 會被自己的預檢擋掉。
-factCheckRoutes.on(["GET", "POST"], "/fact-check", ipRateLimit);
+const paidCors = async (c: Context<ApiEnv>, next: () => Promise<void>) => {
+  setPaidFactCheckCors(c);
+  await next();
+  setPaidFactCheckCors(c);
+};
 
-async function respond(c: Context<ApiEnv>, input: FactCheckInput) {
-  let waitUntil: ((task: Promise<void>) => void) | undefined;
-  try {
-    const context = c.executionCtx;
-    waitUntil = (task) => context.waitUntil(task);
-  } catch {
-    /* 一般 Node 單元測試沒有 Worker execution context。 */
-  }
-  const result = await cachedFactCheck(input, c.env, {
-    origin: new URL(c.req.url).origin,
-    requestId: c.get("requestId"),
-    waitUntil,
+factCheckRoutes.use("/fact-check", paidCors);
+factCheckRoutes.use("/fact-check", x402PaymentMiddleware);
+
+function coreRequest(c: Context<ApiEnv>, input: FactCheckInput): Request {
+  const coreUrl = new URL(c.req.url);
+  coreUrl.pathname = "/fact-check";
+  coreUrl.search = "";
+  return new Request(coreUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
-  c.header("X-Fact-Check-Cache", result.meta.cache!.status.toUpperCase());
-  return c.json(result);
 }
 
-// 同源請求不需要 CORS 預檢；只有允許清單內的跨來源才回授權標頭，其餘一律 403。
+async function proxyToCore(c: Context<ApiEnv>, input: FactCheckInput): Promise<Response> {
+  if (!c.env.FACT_CHECK_CORE)
+    throw new ApiError("UPSTREAM_UNAVAILABLE", "查核核心服務暫時無法使用。", 502);
+  try {
+    const upstream = await c.env.FACT_CHECK_CORE.fetch(coreRequest(c, input));
+    return new Response(upstream.body, upstream);
+  } catch {
+    throw new ApiError("UPSTREAM_UNAVAILABLE", "查核核心服務暫時無法使用。", 502);
+  }
+}
+
 factCheckRoutes.options("/fact-check", (c) => {
-  const origin = allowedCrossOrigin(c);
-  if (!origin) throw forbiddenOrigin();
-  setFactCheckPreflightCors(c, origin);
+  setPaidFactCheckCors(c);
   return c.body(null, 204);
 });
 
 factCheckRoutes.get("/fact-check", async (c) => {
-  // 使用平台標準的 URL parser，讓 url 欄位本身的 query string（例如 ?pcode=...）
-  // 在解碼後仍完整作為單一輸入值；呼叫端應將整個 url 欄位做 percent-encoding。
   const params = new URL(c.req.url).searchParams;
   if (params.getAll("text").length > 1 || params.getAll("url").length > 1) {
     throw new ApiError("INVALID_INPUT", "text 與 url 不得重複提供。", 400);
@@ -53,24 +54,18 @@ factCheckRoutes.get("/fact-check", async (c) => {
     text: params.get("text") ?? undefined,
     url: params.get("url") ?? undefined,
   });
-  return respond(c, input);
+  return proxyToCore(c, input);
 });
 
 factCheckRoutes.post("/fact-check", async (c) => {
   if (c.req.header("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     throw new ApiError("INVALID_INPUT", "請使用 application/json 格式。", 400);
   }
-  if (Number(c.req.header("content-length")) > LIMITS.requestBytes)
+  if (Number(c.req.header("content-length")) > LIMITS.requestBytes) {
+    void c.req.raw.body?.cancel().catch(() => undefined);
     throw new ApiError("PAYLOAD_TOO_LARGE", "請求內容過大。", 413);
-  let raw: string;
-  try {
-    raw = await withTimeout(
-      (signal) => readLimitedText(c.req.raw.body, LIMITS.requestBytes, signal),
-      LIMITS.fetchTimeoutMs,
-    );
-  } catch {
-    throw new ApiError("INVALID_INPUT", "請求內容過大、逾時或無法讀取。", 400);
   }
+  const raw = await readLimitedText(c.req.raw.body, LIMITS.requestBytes, LIMITS.fetchTimeoutMs);
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -78,5 +73,5 @@ factCheckRoutes.post("/fact-check", async (c) => {
     throw new ApiError("INVALID_INPUT", "JSON 格式不正確。", 400);
   }
   const input = parseInput(value);
-  return respond(c, input);
+  return proxyToCore(c, input);
 });

@@ -40,6 +40,16 @@ export function setFactCheckCors(c: Context<ApiEnv>) {
   c.header("Access-Control-Expose-Headers", EXPOSED_HEADERS);
 }
 
+export function setPaidFactCheckCors(c: Context<ApiEnv>) {
+  c.header("Access-Control-Allow-Origin", "*");
+  c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  c.header("Access-Control-Allow-Headers", "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT");
+  c.header(
+    "Access-Control-Expose-Headers",
+    "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-Request-Id, Cache-Control",
+  );
+}
+
 // 跨來源預檢回應；不提供 Access-Control-Allow-Credentials，端點不使用 cookie 或身分。
 export function setFactCheckPreflightCors(
   c: Context<ApiEnv>,

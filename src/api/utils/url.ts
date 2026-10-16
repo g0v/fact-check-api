@@ -1,8 +1,6 @@
 import { convertIPv4ToBinary, convertIPv6ToBinary } from "hono/utils/ipaddr";
 import { LIMITS } from "../config";
 import { ApiError } from "./errors";
-import { array, record, string } from "./validation";
-import { readLimitedText, type Fetcher } from "./http";
 
 const ipv4Blocked: [string, number][] = [
   ["0.0.0.0", 8],
@@ -35,7 +33,6 @@ function inRange(ip: bigint, base: bigint, prefix: number, bits: number): boolea
 export function isPublicIp(address: string): boolean {
   try {
     if (address.includes(":")) {
-      // URL parser 驗證並正規化 IPv6，包括 IPv4-mapped 表示法。
       const host = new URL(`http://[${address}]/`).hostname.slice(1, -1);
       const ip = convertIPv6ToBinary(host);
       return (
@@ -83,49 +80,4 @@ export function validatePublicUrl(value: string): URL {
   url.hostname = host;
   url.hash = "";
   return url;
-}
-
-// 僅作來源連結正規化，不會抓取。來源中的不合法連結不進入 API 回應。
-export function sourceUrl(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  try {
-    return validatePublicUrl(value).href;
-  } catch {
-    return undefined;
-  }
-}
-
-export async function assertPublicDns(
-  url: URL,
-  fetcher: Fetcher,
-  signal: AbortSignal,
-): Promise<void> {
-  if (url.hostname.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)) return;
-  const responses = await Promise.all(
-    ["A", "AAAA"].map(async (type) => {
-      const endpoint = new URL("https://cloudflare-dns.com/dns-query");
-      endpoint.searchParams.set("name", url.hostname);
-      endpoint.searchParams.set("type", type);
-      const response = await fetcher(endpoint, {
-        headers: { Accept: "application/dns-json" },
-        // Workers 僅支援 follow／manual；DNS 服務的重新導向由狀態檢查拒絕。
-        redirect: "manual",
-        signal,
-      });
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error("無法確認網址的 DNS 位址。");
-      }
-      const data = record(JSON.parse(await readLimitedText(response.body, 32_000, signal)));
-      if (data.Status !== 0) throw new Error("網址 DNS 查詢失敗。");
-      return data.Answer === undefined ? [] : array(data.Answer).map(record);
-    }),
-  );
-  const addresses = responses
-    .flat()
-    .filter((answer) => answer.type === 1 || answer.type === 28)
-    .map((answer) => string(answer.data, 100));
-  if (!addresses.length || addresses.some((address) => !isPublicIp(address))) {
-    throw new Error("網址解析到非公開位址，已停止抓取。");
-  }
 }

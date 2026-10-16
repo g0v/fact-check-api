@@ -72,9 +72,9 @@ export function ipRateLimitKeyFromIp(ip: string): string {
   return `ip:${normalized}`;
 }
 
-// 兩層限流，任一層未綁定（本機 dev/測試）或檢查失敗時該層放行，絕不誤擋。
-// 第一層：Cloudflare 內建 Rate Limiting binding，便宜、per-PoP，只擋明顯洪水。
-// 第二層：Durable Object 精準冷卻（每 key 一顆，記憶體記「上次通過時間」）。
+// 免費 demo 的兩層限流；任一層未綁定（本機 dev/測試）或檢查失敗時該層放行，絕不誤擋。
+// 第一層：Cloudflare 內建 Rate Limiting binding，便宜、per-PoP，只擋明顯洪水（30 次／10 秒）。
+// 第二層：Durable Object 精準冷卻；預設每個 IP 每 60 秒通過一次，可由環境變數覆寫。
 async function isRateLimited(env: ApiBindings, key: string, windowMs: number): Promise<boolean> {
   const limiter = (
     env as { RATE_LIMITER?: { limit: (o: { key: string }) => Promise<{ success: boolean }> } }
@@ -103,7 +103,7 @@ async function isRateLimited(env: ApiBindings, key: string, windowMs: number): P
   }
 }
 
-// 公開查核端點沒有登入身分，只能以來源 IP 當限流 key（同一 NAT 會共用額度）。
+// 免費 demo 沒有登入身分，只能以來源 IP 當限流 key（同一 NAT 會共用額度）。
 // 取不到 cf-connecting-ip（本機 wrangler dev / Node 測試）時不限流，以免誤擋正常使用者。
 export const ipRateLimit: MiddlewareHandler<{ Bindings: ApiBindings }> = async (c, next) => {
   const ip = c.req.header("cf-connecting-ip");
