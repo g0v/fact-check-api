@@ -6,6 +6,7 @@ import { headForHome, headForAbout } from "./ssr/heads";
 import { api } from "./api";
 export { RateLimiterDO } from "./api/services/rate-limiter-do";
 export { PaymentClaimDO } from "./api/services/payment-claim-do";
+export { MppStoreDO } from "./api/services/mpp-store-do";
 import type { ApiBindings } from "./api/types/fact-check";
 
 // Cloudflare Worker 綁定型別；ASSETS 在 wrangler.jsonc 對應到 ./public/

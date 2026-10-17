@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { LIMITS } from "../config";
 import { setPaidFactCheckCors } from "../middleware/cors";
-import { x402PaymentMiddleware } from "../middleware/x402";
+import { paymentMiddleware } from "../middleware/payment";
 import { parseInput } from "../schemas/fact-check";
 import type { ApiEnv, FactCheckInput } from "../types/fact-check";
 import { ApiError } from "../utils/errors";
@@ -16,7 +16,7 @@ const paidCors = async (c: Context<ApiEnv>, next: () => Promise<void>) => {
 };
 
 factCheckRoutes.use("/fact-check", paidCors);
-factCheckRoutes.use("/fact-check", x402PaymentMiddleware);
+factCheckRoutes.use("/fact-check", paymentMiddleware);
 
 function coreRequest(c: Context<ApiEnv>, input: FactCheckInput): Request {
   const coreUrl = new URL(c.req.url);

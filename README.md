@@ -66,13 +66,13 @@ secret 放進前端程式碼。
 
 ## API
 
-| 方法 | 路徑              | 付款                 | 用途                             |
-| ---- | ----------------- | -------------------- | -------------------------------- |
-| GET  | `/`               | 無                   | SSR 首頁與免費表單               |
-| GET  | `/health`         | 無                   | 回傳 `{"status":"ok"}`           |
-| GET  | `/api/fact-check` | x402，每次 0.05 USDC | query string 轉 JSON 後轉送 core |
-| POST | `/api/fact-check` | x402，每次 0.05 USDC | 轉送 JSON 至 core                |
-| POST | `/api/demo`       | 免費                 | 首頁使用的 core facade           |
+| 方法 | 路徑              | 付款                                     | 用途                             |
+| ---- | ----------------- | ---------------------------------------- | -------------------------------- |
+| GET  | `/`               | 無                                       | SSR 首頁與免費表單               |
+| GET  | `/health`         | 無                                       | 回傳 `{"status":"ok"}`           |
+| GET  | `/api/fact-check` | x402，每次 0.05 USDC（啟用時亦可用 MPP） | query string 轉 JSON 後轉送 core |
+| POST | `/api/fact-check` | x402，每次 0.05 USDC（啟用時亦可用 MPP） | 轉送 JSON 至 core                |
+| POST | `/api/demo`       | 免費                                     | 首頁使用的 core facade           |
 
 `/api/fact-check` 接受 `text`（必要，最多 10,000 個 Unicode code point）與 `url`（選填，公開 HTTP／HTTPS 網址，最多 2,048 個字元）。POST 必須使用 `Content-Type: application/json`，本文最多 128,000 bytes。輸入驗證在付款放行後執行，避免未付款請求繞過閘門。
 
@@ -166,6 +166,28 @@ Bearer token 的其他 facilitator。middleware 會透過 Coinbase 官方 SDK �
 ### 核心錯誤與結算風險
 
 x402 middleware 先 verify，再執行 handler；SDK 對 handler 回應 `>=400` 不呼叫 settle，而是把錯誤回給客戶端。因此 core 回 `>=400`，或 core fetch 失敗由本 Worker 轉成 `502 UPSTREAM_UNAVAILABLE` 時，不會結算，客戶端不被扣款。真正的殘餘風險是 core 回 `2xx` 但本文內容其實是業務錯誤時仍會結算，以及 settle 本身發生網路失敗時需要另外確認付款狀態；x402 沒有內建退款機制。
+
+## MPP 付款（Stripe Machine Payments，選用）
+
+設定 `MPP_SECRET_KEY` 與 `STRIPE_SECRET_KEY` 兩個 secrets 後，`/api/fact-check` 另外接受 [Machine Payments Protocol](https://paymentauth.org/)（MPP）付款，款項以 Tempo 穩定幣付到 Stripe 的存款地址，並在 Stripe 記錄為 PaymentIntent。兩把都未設定時維持只有 x402；只設定一把視為設定錯誤。x402 流程不受影響。
+
+| 名稱                        | 類型   | 說明                                                                                       |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| `MPP_SECRET_KEY`            | secret | 以 HMAC 綁定 challenge，至少 32 bytes（`openssl rand -base64 32`）                         |
+| `STRIPE_SECRET_KEY`         | secret | Stripe 金鑰；`sk_test_`／`rk_test_` 使用 Tempo testnet pathUSD，`sk_live_` 使用 Tempo USDC |
+| `MPP_TEMPO_DEPOSIT_ADDRESS` | var    | 選填；未設定時以 Stripe API 查詢或建立 Tempo 存款地址並在 isolate 內快取                   |
+
+價格沿用 `X402_PRICE`。流程：
+
+1. 未付款請求的 `402` 同時帶 x402 的 `PAYMENT-REQUIRED` 與 MPP 的 `WWW-Authenticate: Payment`（method `tempo`、intent `charge`、5 分鐘效期）。
+2. client 簽署 Tempo 交易但**不自行廣播**，以 `Authorization: Payment <credential>` 重送同一請求。只接受 pull 模式；同時帶 x402 付款標頭回 `400`。
+3. 本服務驗證憑證（不廣播）→ 占位付款地址並原子 claim challenge → 於占位內重新驗證 → 執行 core。
+4. core 回應小於 `400` 才廣播交易，成功後附 `Payment-Receipt`；core 失敗不廣播、不收費。廣播失敗時不交付結果，回 `402 PAYMENT_FAILED` 與新 challenge。
+5. 同一 challenge 只能使用一次（`409 PAYMENT_ALREADY_CLAIMED`）；同一付款地址同時只能有一筆進行中（`409 PAYMENT_IN_PROGRESS`）。
+
+卡片付款（Shared Payment Token）未提供：Stripe 單筆最低 0.50 美元，高於目前 0.05 美元的價格，而且卡片在 core 執行前就會扣款。
+
+端到端測試可用 Stripe 測試金鑰部署到 staging，再以 `npx mppx account create`（testnet 自動注資）與 `npx mppx <url> --protocol mpp` 付款，不需要真實資金。
 
 ## 回應與錯誤
 
