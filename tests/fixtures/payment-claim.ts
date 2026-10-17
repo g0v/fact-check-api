@@ -10,7 +10,7 @@ export type PaymentClaimFixtureNamespace = DurableObjectNamespaceLike & {
   seedClaim(id: unknown, value: Record<string, unknown>): Promise<void>;
 };
 
-class DurableMemoryStorage implements PaymentClaimStorageLike {
+export class DurableMemoryStorage implements PaymentClaimStorageLike {
   private values = new Map<string, unknown>();
   private alarmTime: number | null = null;
   private transactionTail: Promise<void> = Promise.resolve();

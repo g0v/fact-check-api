@@ -6,11 +6,13 @@
 
 1. `index.ts`：request ID、`Cache-Control: no-store` 與統一錯誤回應。
 2. `routes/fact-check.ts`：GET／POST 輸入驗證、GET→POST core 轉換與 x402 閘門。
-3. `middleware/x402.ts`：`@x402/hono` 設定、EVM exact scheme、必要付款 vars 與 facilitator URL／認證。
-4. `routes/demo.ts`：免費 facade；不要把此路由改成付費或移除 Origin guard、CORS、`ipRateLimit`。
-5. `middleware/cors.ts`、`middleware/origin.ts`、`middleware/rate-limit.ts`：免費 demo 的既有守護，以及付費端點的寬鬆 CORS。
-6. `services/payment-claim-do.ts`、`middleware/payment-claim.ts`：跨 isolate 的持久化原子付款 claim、authorization 識別與到期清理。
-7. `types/fact-check.ts`：service binding、付款設定與 Durable Object binding 的最小型別。
+3. `middleware/payment.ts`：依付款標頭分派 x402 或 MPP，並在 x402 的 402 附上 MPP challenge。
+4. `middleware/x402.ts`：`@x402/hono` 設定、EVM exact scheme、必要付款 vars 與 facilitator URL／認證。
+5. `middleware/mpp.ts`、`services/mpp-store-do.ts`：選用的 MPP（Stripe Machine Payments）付款與 mppx 的持久化原子 Store。
+6. `routes/demo.ts`：免費 facade；不要把此路由改成付費或移除 Origin guard、CORS、`ipRateLimit`。
+7. `middleware/cors.ts`、`middleware/origin.ts`、`middleware/rate-limit.ts`：免費 demo 的既有守護，以及付費端點的寬鬆 CORS。
+8. `services/payment-claim-do.ts`、`middleware/payment-claim.ts`：跨 isolate 的持久化原子付款 claim、authorization 識別與到期清理。
+9. `types/fact-check.ts`：service binding、付款設定與 Durable Object binding 的最小型別。
 
 ## x402 閘門
 

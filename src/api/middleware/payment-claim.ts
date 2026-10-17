@@ -18,11 +18,12 @@ export async function claimVerifiedPayment(
   header: string | undefined,
   reverify: (payment: PaymentPayload) => Promise<boolean>,
 ): Promise<ClaimedPayment> {
-  const namespace = env.PAYMENT_CLAIM_DO;
-  if (!namespace) throw new ApiError("PAYMENT_CLAIM_UNAVAILABLE", "付款防重放服務未設定。", 500);
+  if (!env.PAYMENT_CLAIM_DO) {
+    throw new ApiError("PAYMENT_CLAIM_UNAVAILABLE", "付款防重放服務未設定。", 500);
+  }
 
-  let key: string;
-  let accountKey: string;
+  let identity: string;
+  let accountIdentity: string;
   let amount: string;
   let expiresAt: number;
   let payment: PaymentPayload;
@@ -70,11 +71,51 @@ export async function claimVerifiedPayment(
     ) {
       throw new Error("付款授權已過期、效期過長或無法處理。");
     }
-    const identity = `eip3009:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}:${authorization.nonce.toLowerCase()}`;
-    const accountIdentity = `eip3009:account:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}`;
-    key = await paymentKey(identity);
-    accountKey = await paymentKey(accountIdentity);
+    identity = `eip3009:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}:${authorization.nonce.toLowerCase()}`;
+    accountIdentity = `eip3009:account:eip155:${BigInt(payment.accepted.network.slice(7))}:${payment.accepted.asset.toLowerCase()}:${authorization.from.toLowerCase()}`;
     amount = authorization.value;
+  } catch {
+    throw new ApiError("INVALID_PAYMENT", "付款授權無法用於防重放檢查，請提供新的有效付款。", 400);
+  }
+
+  return claimPayment(env, { identity, accountIdentity, amount, expiresAt }, () =>
+    reverify(payment),
+  );
+}
+
+export type PaymentIdentity = {
+  // 單筆付款授權的唯一身分；同一身分只能進入 core 一次。
+  identity: string;
+  // 餘額來源（付款地址）身分；同一來源一次只允許一筆付款進行中。
+  accountIdentity: string;
+  // 付款金額（最小單位的十進位字串）。
+  amount: string;
+  // claim 與占位的到期時間（毫秒），須涵蓋完整授權效期。
+  expiresAt: number;
+};
+
+// x402 與 MPP 共用：付款驗證通過後，先占位付款地址，再原子 claim 授權身分，最後在占位內重新驗證。
+export async function claimPayment(
+  env: ApiBindings,
+  payment: PaymentIdentity,
+  reverify: () => Promise<boolean>,
+): Promise<ClaimedPayment> {
+  const namespace = env.PAYMENT_CLAIM_DO;
+  if (!namespace) throw new ApiError("PAYMENT_CLAIM_UNAVAILABLE", "付款防重放服務未設定。", 500);
+  const { amount, expiresAt } = payment;
+  let key: string;
+  let accountKey: string;
+  try {
+    if (
+      !/^[1-9]\d{0,77}$/.test(amount) ||
+      !Number.isSafeInteger(expiresAt) ||
+      expiresAt - Date.now() > CLAIM_TTL_MAX_MS ||
+      expiresAt - 60_000 <= Date.now()
+    ) {
+      throw new Error("付款授權已過期、效期過長或無法處理。");
+    }
+    key = await paymentKey(payment.identity);
+    accountKey = await paymentKey(payment.accountIdentity);
   } catch {
     throw new ApiError("INVALID_PAYMENT", "付款授權無法用於防重放檢查，請提供新的有效付款。", 400);
   }
@@ -150,7 +191,7 @@ export async function claimVerifiedPayment(
     // 在地址占位內重新查驗，避免另一筆結算後仍使用先前的餘額驗證結果。
     let isValid: boolean;
     try {
-      isValid = await reverify(payment);
+      isValid = await reverify();
     } catch {
       throw new ApiError("PAYMENT_VERIFICATION_UNAVAILABLE", "付款重新驗證暫時無法使用。", 502);
     }

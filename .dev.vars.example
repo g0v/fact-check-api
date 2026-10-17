@@ -10,3 +10,9 @@ FACILITATOR_URL=https://www.x402.org/facilitator
 
 # 只有其他 facilitator 明確提供固定 Bearer token 時才使用；不要與 CDP keys 同時設定。
 # FACILITATOR_AUTH_TOKEN=your-facilitator-auth-token
+
+# 選用：啟用 MPP（Stripe Machine Payments）。兩把都設定才啟用；sk_test_ 金鑰使用 Tempo testnet。
+# MPP_SECRET_KEY 至少 32 bytes，可用 openssl rand -base64 32 產生。
+# MPP_SECRET_KEY=your-mpp-secret-key
+# STRIPE_SECRET_KEY=your-stripe-secret-key
+# MPP_TEMPO_DEPOSIT_ADDRESS=your-stripe-tempo-deposit-address

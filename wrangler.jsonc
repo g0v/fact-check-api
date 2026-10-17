@@ -12,6 +12,8 @@
     "X402_PRICE": "$0.05",
     // 正式 Base mainnet 使用 CDP；部署前須設定 CDP_API_KEY_ID／CDP_API_KEY_SECRET secrets。
     "FACILITATOR_URL": "https://api.cdp.coinbase.com/platform/v2/x402",
+    // MPP（Stripe Machine Payments）預設關閉；設定 MPP_SECRET_KEY 與 STRIPE_SECRET_KEY 兩個 secrets 後啟用，
+    // 價格沿用 X402_PRICE。可選 MPP_TEMPO_DEPOSIT_ADDRESS 指定 Stripe Tempo 存款地址。
     // demo 是唯一免費入口，預設每個 IP 每 60 秒最多一次，可由環境變數覆寫。
     "RATE_LIMIT_WINDOW_MS": "60000",
   },
@@ -28,6 +30,8 @@
       { "name": "RATE_LIMIT_DO", "class_name": "RateLimiterDO" },
       // 每筆付款授權的持久化原子 claim，禁止跨 isolate 重放進入 core。
       { "name": "PAYMENT_CLAIM_DO", "class_name": "PaymentClaimDO" },
+      // MPP（Stripe）Tempo 交易的重放標記；只在設定 MPP_SECRET_KEY／STRIPE_SECRET_KEY 後使用。
+      { "name": "MPP_STORE_DO", "class_name": "MppStoreDO" },
     ],
   },
   // 議題 #25：第一層限流，Cloudflare 內建 Rate Limiting binding，便宜、per-PoP；
@@ -42,6 +46,7 @@
     { "tag": "v2", "new_sqlite_classes": ["RateLimiterDO"] },
     { "tag": "v3", "deleted_classes": ["UsageBudget"] },
     { "tag": "v4", "new_sqlite_classes": ["PaymentClaimDO"] },
+    { "tag": "v5", "new_sqlite_classes": ["MppStoreDO"] },
   ],
   "observability": {
     "enabled": true,

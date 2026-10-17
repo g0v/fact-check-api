@@ -43,10 +43,13 @@ export function setFactCheckCors(c: Context<ApiEnv>) {
 export function setPaidFactCheckCors(c: Context<ApiEnv>) {
   c.header("Access-Control-Allow-Origin", "*");
   c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  c.header("Access-Control-Allow-Headers", "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT");
+  c.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT, Authorization",
+  );
   c.header(
     "Access-Control-Expose-Headers",
-    "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-Request-Id, Cache-Control",
+    "PAYMENT-REQUIRED, PAYMENT-RESPONSE, WWW-Authenticate, Payment-Receipt, X-Request-Id, Cache-Control",
   );
 }
 
